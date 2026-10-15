@@ -26,7 +26,7 @@
 
 ## Технологии
 
-- Python 3, Django 5, SQLite
+- Python 3.12+, Django 6.1, SQLite
 - HTML5, CSS3 (Grid/Flexbox), немного JavaScript (только UI)
 - Django Templates, Django ORM, Forms, Sessions, CSRF-защита
 
@@ -49,7 +49,9 @@
 
 ### Ручной запуск (пошагово)
 
-1. Установите [Python 3.10+](https://www.python.org/downloads/) (отметьте галочку «Add to PATH»).
+1. Установите [Python 3.12+](https://www.python.org/downloads/) (отметьте галочку «Add to PATH»).
+   Django 6.1 требует Python 3.12 или новее — на более старых версиях
+   зависимости не установятся.
 
 2. Откройте папку проекта в терминале (PowerShell или «Командная строка»):
 
@@ -201,8 +203,9 @@ python manage.py seed_data
 pip install -r requirements.txt
 ```
 
-Проект проверен на Django 5.2; если `pip` поставил Django 6.x, команда выше
-вернёт проверенную версию. И не запускайте одновременно сервер из PyCharm
+Проект разработан и проверен на Django 6.1 (последняя ветка) и Python 3.12+.
+Зависимости ставьте только из `requirements.txt` — там указана проверенная
+ветка Django (`>=6.1,<7.0`). И не запускайте одновременно сервер из PyCharm
 и `run.bat` — оба занимают порт 8000.
 
 **Ошибка про `WindowsApps\python.exe` при запуске батников**

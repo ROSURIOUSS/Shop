@@ -36,6 +36,16 @@ echo  Найден Python-лаунчер: %PYTHON%
 %PYTHON% --version
 echo.
 
+rem Django 6.1 требует Python 3.12 или новее.
+%PYTHON% -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)" >nul 2>&1
+if errorlevel 1 (
+    echo  [ОШИБКА] Нужен Python 3.12 или новее — текущая версия слишком старая.
+    echo  Установите свежий Python с https://www.python.org/downloads/
+    echo  и перезапустите run.bat.
+    pause
+    exit /b 1
+)
+
 rem ---------- 2. Виртуальное окружение ----------
 if not exist ".venv\Scripts\python.exe" (
     echo  [1/5] Создаю виртуальное окружение .venv ...
