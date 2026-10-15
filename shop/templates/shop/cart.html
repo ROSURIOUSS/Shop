@@ -1,0 +1,111 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Корзина — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Корзина</h1>
+      <p class="page-subtitle">Проверьте товары и перейдите к оформлению заказа</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      {% if cart.is_empty %}
+        <div class="empty-state">
+          <span class="empty-state__icon">{% icon 'cart' 40 %}</span>
+          <h2 class="empty-state__title">Ваша корзина пуста</h2>
+          <p class="empty-state__text">Добавьте товары из каталога — и они появятся здесь.</p>
+          <a class="btn btn-primary" href="{% url 'shop:catalog' %}">{% icon 'arrow-right' 16 %} Перейти в каталог</a>
+        </div>
+      {% else %}
+        <div class="cart-layout">
+          <div class="cart-items">
+            <div class="cart-item cart-item--head">
+              <span>Товар</span>
+              <span>Цена</span>
+              <span>Количество</span>
+              <span>Сумма</span>
+              <span></span>
+            </div>
+
+            {% for item in cart %}
+              <div class="cart-item">
+                <div class="cart-item__product">
+                  <a class="cart-item__media" href="{{ item.product.get_absolute_url }}">
+                    <img src="{{ item.product.get_image_url }}" alt="{{ item.product.name }}">
+                  </a>
+                  <div>
+                    <a class="cart-item__name" href="{{ item.product.get_absolute_url }}">{{ item.product.name }}</a>
+                    <span class="cart-item__category">{{ item.product.category.name }}</span>
+                    {% if item.quantity > item.product.stock %}
+                      <span class="stock stock--out">Остаток: {{ item.product.stock }} шт.</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="cart-item__price">{{ item.price|money }}</div>
+
+                <div class="cart-item__qty">
+                  <form class="qty-form" action="{% url 'shop:cart_update' item.product.pk %}" method="post">
+                    {% csrf_token %}
+                    <div class="qty-picker qty-picker--sm">
+                      <button class="qty-btn" type="submit" name="quantity" value="{{ item.quantity|add:'-1' }}"
+                              aria-label="Уменьшить количество">{% icon 'minus' 14 %}</button>
+                      <span class="qty-value">{{ item.quantity }}</span>
+                      <button class="qty-btn" type="submit" name="quantity" value="{{ item.quantity|add:'1' }}"
+                              aria-label="Увеличить количество">{% icon 'plus' 14 %}</button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="cart-item__total">{{ item.total_price|money }}</div>
+
+                <div class="cart-item__remove">
+                  <form action="{% url 'shop:cart_remove' item.product.pk %}" method="post"
+                        data-confirm="Удалить «{{ item.product.name }}» из корзины?">
+                    {% csrf_token %}
+                    <button class="icon-btn icon-btn--danger" type="submit" aria-label="Удалить товар">
+                      {% icon 'trash' 18 %}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+
+            <div class="cart-actions">
+              <a class="btn btn-ghost" href="{% url 'shop:catalog' %}">{% icon 'arrow-left' 16 %} Продолжить покупки</a>
+              <form action="{% url 'shop:cart_clear' %}" method="post" data-confirm="Очистить всю корзину?">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-danger-text" type="submit">{% icon 'trash' 16 %} Очистить корзину</button>
+              </form>
+            </div>
+          </div>
+
+          <aside class="cart-summary">
+            <h2 class="summary-title">Ваш заказ</h2>
+            <div class="summary-row">
+              <span>Товаров в корзине</span>
+              <strong>{{ cart|length }} шт.</strong>
+            </div>
+            <div class="summary-row">
+              <span>Промежуточная стоимость</span>
+              <strong>{{ cart_total|money }}</strong>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-row summary-row--total">
+              <span>Итого</span>
+              <strong class="price price--lg">{{ cart_total|money }}</strong>
+            </div>
+            <a class="btn btn-primary btn-lg btn-block" href="{% url 'shop:checkout' %}">
+              Оформить заказ {% icon 'arrow-right' 18 %}
+            </a>
+            <p class="summary-note">Оплата не подключена — учебный проект сохраняет заказ в SQLite.</p>
+          </aside>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

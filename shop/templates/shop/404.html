@@ -1,0 +1,23 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Страница не найдена — GameZone{% endblock %}
+
+{% block content %}
+  <section class="section">
+    <div class="container">
+      <div class="success-card">
+        <span class="success-icon success-icon--error">{% icon 'alert' 56 %}</span>
+        <h1 class="success-title">Страница не найдена</h1>
+        <p class="success-text">
+          Ошибка 404: такой страницы не существует. Возможно, товар или категория
+          были удалены, или в адресе опечатка.
+        </p>
+        <div class="success-actions">
+          <a class="btn btn-primary btn-lg" href="{% url 'shop:home' %}">{% icon 'arrow-left' 18 %} На главную</a>
+          <a class="btn btn-ghost btn-lg" href="{% url 'shop:catalog' %}">Перейти в каталог</a>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Каталог игровых товаров — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Каталог игровых товаров</h1>
+      <p class="page-subtitle">Подбери оборудование под свой стиль игры</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container catalog-layout">
+      <aside class="catalog-sidebar">
+        {% url 'shop:catalog' as catalog_url %}
+        {% include 'shop/includes/filter_panel.html' with action_url=request.path reset_url=catalog_url show_category_filter=True %}
+      </aside>
+
+      <div class="catalog-main">
+        <div class="catalog-toolbar">
+          <p class="result-count">
+            {% if filters.q or filters.category or filters.min_price or filters.max_price %}
+              Найдено товаров: <strong>{{ result_count }}</strong>
+            {% else %}
+              Товаров в каталоге: <strong>{{ result_count }}</strong>
+            {% endif %}
+          </p>
+        </div>
+
+        {% if products %}
+          <div class="product-grid product-grid--catalog">
+            {% for product in products %}
+              {% include 'shop/includes/product_card.html' with product=product %}
+            {% endfor %}
+          </div>
+          {% include 'shop/includes/pagination.html' %}
+        {% else %}
+          <div class="empty-state">
+            <span class="empty-state__icon">{% icon 'search' 40 %}</span>
+            <h2 class="empty-state__title">По вашему запросу ничего не найдено</h2>
+            <p class="empty-state__text">Попробуйте изменить параметры поиска или сбросьте фильтры.</p>
+            <a class="btn btn-primary" href="{% url 'shop:catalog' %}">{% icon 'rotate' 16 %} Сбросить фильтры</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

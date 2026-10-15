@@ -1,0 +1,45 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Заказ успешно оформлен — GameZone{% endblock %}
+
+{% block content %}
+  <section class="section">
+    <div class="container">
+      <div class="success-card">
+        <span class="success-icon">{% icon 'check-circle' 56 %}</span>
+        <h1 class="success-title">Заказ успешно оформлен</h1>
+        <p class="success-text">
+          Спасибо за заказ! Номер вашего заказа:
+          <strong class="order-number">{{ order.order_number }}</strong>
+        </p>
+        <p class="success-text success-text--muted">
+          Заказ сохранён в базе данных учебного проекта. Оплата не подтверждалась —
+          платёжная система не подключена.
+        </p>
+
+        <div class="success-details">
+          <div class="summary-row">
+            <span>Покупатель</span>
+            <strong>{{ order.customer_name }}</strong>
+          </div>
+          <div class="summary-row">
+            <span>Товаров в заказе</span>
+            <strong>{{ order.items.count }} позиц.</strong>
+          </div>
+          <div class="summary-row">
+            <span>Общая сумма</span>
+            <strong class="price">{{ order.total_amount|money }}</strong>
+          </div>
+        </div>
+
+        <div class="success-actions">
+          <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
+            {% icon 'arrow-right' 18 %} Вернуться в каталог
+          </a>
+          <a class="btn btn-ghost btn-lg" href="{% url 'shop:home' %}">На главную</a>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

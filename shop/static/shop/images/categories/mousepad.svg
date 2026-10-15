@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="mp-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="mp-surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#20202F"/>
+      <stop offset="1" stop-color="#12121C"/>
+    </linearGradient>
+    <radialGradient id="mp-glow" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#mp-bg)"/>
+  <rect width="480" height="270" fill="url(#mp-glow)"/>
+
+  <!-- Коврик -->
+  <g transform="translate(60 52)">
+    <rect x="0" y="18" width="360" height="182" rx="20" fill="#0B0B10"/>
+    <rect x="6" y="10" width="348" height="182" rx="18" fill="url(#mp-surface)" stroke="#292936" stroke-width="3"/>
+    <rect x="6" y="10" width="348" height="182" rx="18" fill="none" stroke="url(#mp-bg)" stroke-width="0"/>
+    <path d="M22 26h316M22 176h316" stroke="#8B5CF6" stroke-width="2" opacity="0.4"/>
+    <path d="M22 26c12 30 12 120 0 150M338 26c-12 30-12 120 0 150" stroke="#22D3EE" stroke-width="2" opacity="0.35"/>
+
+    <!-- Мышь на коврике -->
+    <g transform="translate(140 34)">
+      <path d="M42 4C24 6 16 22 16 50c0 38 12 72 26 72s26-34 26-72C68 22 60 6 42 4z"
+            fill="#1C1C2C" stroke="#8B5CF6" stroke-width="3"/>
+      <path d="M42 10v34" stroke="#292936" stroke-width="2.5"/>
+      <rect x="35" y="14" width="14" height="22" rx="7" fill="#22D3EE"/>
+      <circle cx="42" cy="52" r="7" fill="#A78BFA"/>
+    </g>
+  </g>
+
+  <circle cx="402" cy="64" r="6" fill="#8B5CF6" opacity="0.85"/>
+  <circle cx="66" cy="42" r="5" fill="#22D3EE" opacity="0.8"/>
+</svg>

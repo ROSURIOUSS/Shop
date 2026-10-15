@@ -1,0 +1,133 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}GameZone — твоя игровая зона начинается здесь{% endblock %}
+
+{% block content %}
+  <!-- Блок 1. Hero -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <p class="hero-eyebrow">ТВОЯ ИГРОВАЯ ЗОНА</p>
+        <h1 class="hero-title">Твоя игровая зона начинается здесь</h1>
+        <p class="hero-text">
+          Подбираем качественные игровые аксессуары — мышки, клавиатуры, наушники
+          и контроллеры, с которыми играть комфортно каждый день.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
+            Перейти в каталог {% icon 'arrow-right' 18 %}
+          </a>
+          <a class="btn btn-ghost btn-lg" href="{% url 'shop:categories' %}">Наши категории</a>
+        </div>
+      </div>
+      <div class="hero-media">
+        <img src="{% static 'shop/images/hero.svg' %}" alt="Игровая периферия GameZone" width="560" height="440">
+      </div>
+    </div>
+  </section>
+
+  <!-- Блок 2. Категории -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Выбирай своё</h2>
+        <p class="section-subtitle">Всё необходимое для комфортной игры</p>
+      </div>
+      <div class="category-grid">
+        {% for category in categories %}
+          <a class="category-card" href="{{ category.get_absolute_url }}">
+            <div class="category-card__media">
+              <img src="{{ category.get_image_url }}" alt="{{ category.name }}" loading="lazy">
+            </div>
+            <div class="category-card__body">
+              <h3 class="category-card__title">{{ category.name }}</h3>
+              <p class="category-card__count">{{ category.product_count }} товаров</p>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Блок 3. Популярные товары -->
+  <section class="section section--alt">
+    <div class="container">
+      <div class="section-head section-head--row">
+        <h2 class="section-title">Популярное оборудование</h2>
+        <a class="link-more" href="{% url 'shop:catalog' %}">Весь каталог {% icon 'arrow-right' 16 %}</a>
+      </div>
+      <div class="product-grid">
+        {% for product in featured_products %}
+          {% include 'shop/includes/product_card.html' with product=product %}
+        {% empty %}
+          <p class="empty-note">Популярные товары ещё не добавлены. Заполните базу командой <code>python manage.py seed_data</code>.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Блок 4. Новинки -->
+  <section class="section" id="new">
+    <div class="container">
+      <div class="section-head section-head--row">
+        <h2 class="section-title">Новинки</h2>
+        <a class="link-more" href="{% url 'shop:catalog' %}?sort=new">Смотреть все {% icon 'arrow-right' 16 %}</a>
+      </div>
+      <div class="product-grid">
+        {% for product in new_products %}
+          {% include 'shop/includes/product_card.html' with product=product %}
+        {% empty %}
+          <p class="empty-note">Скоро здесь появятся новые товары.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Блок 5. Преимущества -->
+  <section class="section section--alt">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Почему GameZone</h2>
+        <p class="section-subtitle">Продуманный магазин для игрового сетапа</p>
+      </div>
+      <div class="features-grid">
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'sliders' 26 %}</span>
+          <h3 class="feature-title">Удобный выбор товаров</h3>
+          <p class="feature-text">Поиск, фильтры по категориям и цене помогают быстро найти подходящее оборудование.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'package' 26 %}</span>
+          <h3 class="feature-title">Простое оформление заказа</h3>
+          <p class="feature-text">Понятная корзина и короткая форма оформления — заказ собирается за пару минут.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'monitor' 26 %}</span>
+          <h3 class="feature-title">Подробные характеристики</h3>
+          <p class="feature-text">У каждого товара — описание и ключевые параметры, чтобы выбор был осознанным.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'zap' 26 %}</span>
+          <h3 class="feature-title">Удобная навигация</h3>
+          <p class="feature-text">Категории, карточки товаров и понятная структура страниц — легко найти нужное.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Блок 6. Призыв к действию -->
+  <section class="section">
+    <div class="container">
+      <div class="cta-banner">
+        <div class="cta-copy">
+          <h2 class="cta-title">Готов обновить свой сетап?</h2>
+          <p class="cta-text">Загляни в каталог — мышки, клавиатуры, наушники и аксессуары уже ждут.</p>
+        </div>
+        <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
+          Смотреть каталог {% icon 'arrow-right' 18 %}
+        </a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

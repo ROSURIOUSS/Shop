@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="g-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="g-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <radialGradient id="g-glow" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#g-bg)"/>
+  <rect width="480" height="270" fill="url(#g-glow)"/>
+
+  <!-- Геймпад -->
+  <g transform="translate(110 62)">
+    <!-- Корпус с ручками -->
+    <path d="M62 20h106c22 0 40 16 46 36l22 74c6 22-8 42-30 46-16 3-30-5-38-18l-14-24H76l-14 24c-8 13-22 21-38 18-22-4-36-24-30-46l22-74c6-20 24-36 46-36z"
+          fill="#1C1C2C" stroke="#292936" stroke-width="3"/>
+
+    <!-- D-pad -->
+    <path d="M52 62h12v12h12v12H64v12H52V86H40V74h12z" fill="#3A3A52"/>
+
+    <!-- Кнопки -->
+    <circle cx="168" cy="62" r="9" fill="#8B5CF6"/>
+    <circle cx="192" cy="86" r="9" fill="#22D3EE"/>
+    <circle cx="144" cy="86" r="9" fill="#A78BFA"/>
+    <circle cx="168" cy="110" r="9" fill="#8B5CF6"/>
+
+    <!-- Стики -->
+    <circle cx="82" cy="112" r="15" fill="#0B0B10" stroke="#8B5CF6" stroke-width="3"/>
+    <circle cx="82" cy="112" r="7" fill="#3A3A52"/>
+    <circle cx="158" cy="126" r="15" fill="#0B0B10" stroke="#22D3EE" stroke-width="3"/>
+    <circle cx="158" cy="126" r="7" fill="#3A3A52"/>
+
+    <!-- Центральная кнопка -->
+    <circle cx="120" cy="72" r="8" fill="url(#g-accent)"/>
+  </g>
+
+  <circle cx="86" cy="60" r="6" fill="#8B5CF6" opacity="0.85"/>
+  <circle cx="404" cy="204" r="5" fill="#22D3EE"/>
+</svg>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="a-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="a-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="a-glow" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#a-bg)"/>
+  <rect width="480" height="270" fill="url(#a-glow)"/>
+
+  <!-- Веб-камера -->
+  <g transform="translate(84 74)">
+    <rect x="0" y="0" width="150" height="82" rx="18" fill="#1C1C2C" stroke="#292936" stroke-width="3"/>
+    <circle cx="75" cy="40" r="26" fill="#0B0B10" stroke="url(#a-accent)" stroke-width="4"/>
+    <circle cx="75" cy="40" r="13" fill="#20203A" stroke="#22D3EE" stroke-width="3"/>
+    <circle cx="70" cy="35" r="4" fill="#A78BFA" opacity="0.9"/>
+    <rect x="20" y="14" width="14" height="8" rx="4" fill="#8B5CF6"/>
+    <!-- Крепление -->
+    <path d="M40 82v18h70V82" fill="none" stroke="#292936" stroke-width="6" stroke-linecap="round"/>
+    <rect x="34" y="98" width="82" height="12" rx="6" fill="#292936"/>
+  </g>
+
+  <!-- USB-хаб -->
+  <g transform="translate(272 96)">
+    <rect x="0" y="0" width="132" height="72" rx="14" fill="#1C1C2C" stroke="#292936" stroke-width="3"/>
+    <rect x="18" y="22" width="22" height="12" rx="3" fill="#3A3A52"/>
+    <rect x="50" y="22" width="22" height="12" rx="3" fill="#3A3A52"/>
+    <rect x="82" y="22" width="22" height="12" rx="3" fill="#3A3A52"/>
+    <rect x="18" y="44" width="22" height="12" rx="3" fill="#3A3A52"/>
+    <rect x="50" y="44" width="22" height="12" rx="3" fill="#22D3EE" opacity="0.85"/>
+    <rect x="82" y="44" width="22" height="12" rx="3" fill="#3A3A52"/>
+    <!-- Кабель -->
+    <path d="M132 36h30c12 0 16 8 16 18v12" fill="none" stroke="url(#a-accent)" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <circle cx="84" cy="46" r="6" fill="#22D3EE" opacity="0.8"/>
+  <circle cx="416" cy="212" r="5" fill="#8B5CF6"/>
+  <path d="M408 56l5 10 10 5-10 5-5 10-5-10-10-5 10-5z" fill="#A78BFA" opacity="0.7"/>
+</svg>

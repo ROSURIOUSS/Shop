@@ -1,0 +1,118 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Оформление заказа — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Оформление заказа</h1>
+      <p class="page-subtitle">Заполните контактные данные — и мы сохраним ваш заказ</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container checkout-layout">
+      <div class="checkout-form-col">
+        <form class="checkout-form" method="post" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert--error">
+              <span class="alert-icon">{% icon 'alert' %}</span>
+              <span>{{ form.non_field_errors }}</span>
+            </div>
+          {% endif %}
+
+          <div class="form-grid">
+            <div class="form-field{% if form.customer_name.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.customer_name.id_for_label }}">
+                Имя и фамилия <span class="req">*</span>
+              </label>
+              {{ form.customer_name }}
+              {% if form.customer_name.errors %}
+                <p class="form-error">{{ form.customer_name.errors|first }}</p>
+              {% endif %}
+            </div>
+
+            <div class="form-field{% if form.phone.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.phone.id_for_label }}">
+                Телефон <span class="req">*</span>
+              </label>
+              {{ form.phone }}
+              {% if form.phone.errors %}
+                <p class="form-error">{{ form.phone.errors|first }}</p>
+              {% endif %}
+            </div>
+
+            <div class="form-field{% if form.email.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.email.id_for_label }}">Email</label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <p class="form-error">{{ form.email.errors|first }}</p>
+              {% endif %}
+            </div>
+
+            <div class="form-field{% if form.city.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.city.id_for_label }}">
+                Город <span class="req">*</span>
+              </label>
+              {{ form.city }}
+              {% if form.city.errors %}
+                <p class="form-error">{{ form.city.errors|first }}</p>
+              {% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.address.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.address.id_for_label }}">
+                Адрес доставки <span class="req">*</span>
+              </label>
+              {{ form.address }}
+              {% if form.address.errors %}
+                <p class="form-error">{{ form.address.errors|first }}</p>
+              {% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.comment.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.comment.id_for_label }}">Комментарий</label>
+              {{ form.comment }}
+              {% if form.comment.errors %}
+                <p class="form-error">{{ form.comment.errors|first }}</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg" type="submit">
+            {% icon 'check' 18 %} Подтвердить заказ
+          </button>
+          <p class="form-note">
+            Оплата не подключена: заказ сохраняется в базе данных учебного проекта.
+          </p>
+        </form>
+      </div>
+
+      <aside class="checkout-summary">
+        <h2 class="summary-title">Сводка заказа</h2>
+        <ul class="summary-items">
+          {% for item in cart_items %}
+            <li class="summary-item">
+              <div class="summary-item__info">
+                <span class="summary-item__name">{{ item.product.name }}</span>
+                <span class="summary-item__meta">{{ item.quantity }} шт. × {{ item.price|money }}</span>
+              </div>
+              <strong class="summary-item__total">{{ item.total_price|money }}</strong>
+            </li>
+          {% endfor %}
+        </ul>
+        <div class="summary-divider"></div>
+        <div class="summary-row summary-row--total">
+          <span>Итого</span>
+          <strong class="price price--lg">{{ cart_total|money }}</strong>
+        </div>
+        <a class="btn btn-ghost btn-block" href="{% url 'shop:cart' %}">
+          {% icon 'arrow-left' 16 %} Вернуться в корзину
+        </a>
+      </aside>
+    </div>
+  </section>
+{% endblock %}

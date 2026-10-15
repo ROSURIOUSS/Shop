@@ -1,0 +1,59 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}{{ category.name }} — GameZone{% endblock %}
+{% block meta_description %}{{ category.description }}{% endblock %}
+
+{% block content %}
+  <section class="page-head page-head--category">
+    <div class="container page-head__inner">
+      <div>
+        <nav class="breadcrumbs" aria-label="Хлебные крошки">
+          <a href="{% url 'shop:home' %}">Главная</a>
+          {% icon 'chevron-right' 14 %}
+          <a href="{% url 'shop:categories' %}">Категории</a>
+          {% icon 'chevron-right' 14 %}
+          <span>{{ category.name }}</span>
+        </nav>
+        <h1 class="page-title">{{ category.name }}</h1>
+        <p class="page-subtitle">{{ category.description }}</p>
+        <p class="result-count">Товаров в категории: <strong>{{ result_count }}</strong></p>
+      </div>
+      <div class="page-head__media">
+        <img src="{{ category.get_image_url }}" alt="{{ category.name }}">
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container catalog-layout">
+      <aside class="catalog-sidebar">
+        {% include 'shop/includes/filter_panel.html' with action_url=request.path reset_url=category.get_absolute_url %}
+      </aside>
+
+      <div class="catalog-main">
+        <div class="catalog-toolbar">
+          <a class="link-more" href="{% url 'shop:catalog' %}">
+            {% icon 'arrow-left' 16 %} Перейти к полному каталогу
+          </a>
+        </div>
+
+        {% if products %}
+          <div class="product-grid product-grid--catalog">
+            {% for product in products %}
+              {% include 'shop/includes/product_card.html' with product=product %}
+            {% endfor %}
+          </div>
+          {% include 'shop/includes/pagination.html' %}
+        {% else %}
+          <div class="empty-state">
+            <span class="empty-state__icon">{% icon 'package' 40 %}</span>
+            <h2 class="empty-state__title">По вашему запросу ничего не найдено</h2>
+            <p class="empty-state__text">В этой категории нет товаров по заданным фильтрам.</p>
+            <a class="btn btn-primary" href="{{ category.get_absolute_url }}">{% icon 'rotate' 16 %} Сбросить фильтры</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}
