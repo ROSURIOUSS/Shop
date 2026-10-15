@@ -13,13 +13,37 @@ echo  Логин и пароль вводятся как обычный текс
 echo  символы видны на экране (для учебного проекта это нормально).
 echo.
 
-if not exist ".venv\Scripts\python.exe" (
-    echo  [ОШИБКА] Виртуальное окружение не найдено.
-    echo  Сначала один раз запустите run.bat — он всё подготовит.
-    echo.
+rem ---------- Определяем Python ----------
+rem Приоритет: виртуальное окружение .venv, затем лаунчер py, затем python.
+rem Проверяем именно запуск команды, а не where: подставла Microsoft Store
+rem (WindowsApps\python.exe) находится в PATH, но не является настоящим Python.
+set "VPY=.venv\Scripts\python.exe"
+if exist "%VPY%" goto have_python
+set "VPY=py"
+%VPY% --version >nul 2>&1
+if not errorlevel 1 goto have_python
+set "VPY=python"
+%VPY% --version >nul 2>&1
+if not errorlevel 1 goto have_python
+
+echo  [ОШИБКА] Python не найден или не запускается.
+echo  Сначала один раз запустите run.bat — он всё подготовит.
+echo.
+pause
+exit /b 1
+
+:have_python
+rem ---------- Миграции ----------
+rem Защита от ошибки "no such table: auth_user": без миграций
+rem ни админка, ни создание администратора работать не будут.
+echo  Применяю миграции базы данных ...
+"%VPY%" manage.py migrate
+if errorlevel 1 (
+    echo  [ОШИБКА] Не удалось применить миграции.
     pause
     exit /b 1
 )
+echo.
 
 set "ADMUSER="
 set "ADMPASS="
@@ -42,7 +66,7 @@ set "DJANGO_SUPERUSER_USERNAME=%ADMUSER%"
 set "DJANGO_SUPERUSER_EMAIL=%ADMUSER%@gamezone.local"
 set "DJANGO_SUPERUSER_PASSWORD=%ADMPASS%"
 
-".venv\Scripts\python.exe" manage.py createsuperuser --noinput
+"%VPY%" manage.py createsuperuser --noinput
 if errorlevel 1 (
     echo.
     echo  [ОШИБКА] Не удалось создать администратора.
@@ -55,7 +79,7 @@ if errorlevel 1 (
 echo.
 echo  Готово! Администратор "%ADMUSER%" создан.
 echo  Войти в админ-панель: http://127.0.0.1:8000/admin/
-echo  (сначала должен работать run.bat).
+echo  (сначала должен работать сервер: run.bat или PyCharm).
 echo.
 pause
 endlocal
