@@ -93,5 +93,16 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Источники, которым доверяет CSRF-защита (нужно, если сайт открыт через
+# HTTPS-прокси с другим доменом — например, онлайн-предпросмотр проекта).
+CSRF_TRUSTED_ORIGINS = [
+    origin
+    for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin
+]
+if DEBUG:
+    # Онлайн-предпросмотр учебного проекта (домен *.e2b.app).
+    CSRF_TRUSTED_ORIGINS.append('https://*.e2b.app')
+
 # Сообщения об успехе/ошибках (добавление в корзину, оформление заказа)
 MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
