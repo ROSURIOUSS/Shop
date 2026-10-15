@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="k-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="k-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="k-glow" cx="0.5" cy="0.6" r="0.6">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#k-bg)"/>
+  <rect width="480" height="270" fill="url(#k-glow)"/>
+
+  <!-- Клавиатура -->
+  <g transform="translate(56 68)">
+    <rect x="0" y="0" width="368" height="134" rx="16" fill="#1C1C2C" stroke="#292936" stroke-width="3"/>
+    <rect x="0" y="118" width="368" height="16" fill="#0B0B10" opacity="0.45"/>
+
+    <!-- Верхний ряд -->
+    <g>
+      <rect x="18" y="18" width="30" height="22" rx="5" fill="#8B5CF6"/>
+      <rect x="56" y="18" width="30" height="22" rx="5" fill="#3A3A52"/>
+      <rect x="94" y="18" width="30" height="22" rx="5" fill="#3A3A52"/>
+      <rect x="132" y="18" width="30" height="22" rx="5" fill="#22D3EE"/>
+      <rect x="170" y="18" width="30" height="22" rx="5" fill="#3A3A52"/>
+      <rect x="208" y="18" width="30" height="22" rx="5" fill="#3A3A52"/>
+      <rect x="246" y="18" width="30" height="22" rx="5" fill="#A78BFA"/>
+      <rect x="284" y="18" width="30" height="22" rx="5" fill="#3A3A52"/>
+      <rect x="322" y="18" width="28" height="22" rx="5" fill="#3A3A52"/>
+    </g>
+
+    <!-- Средние ряды -->
+    <g fill="#2E2E44">
+      <rect x="18" y="48" width="34" height="22" rx="5"/><rect x="60" y="48" width="34" height="22" rx="5"/>
+      <rect x="102" y="48" width="34" height="22" rx="5"/><rect x="144" y="48" width="34" height="22" rx="5"/>
+      <rect x="186" y="48" width="34" height="22" rx="5"/><rect x="228" y="48" width="34" height="22" rx="5"/>
+      <rect x="270" y="48" width="34" height="22" rx="5"/><rect x="312" y="48" width="40" height="22" rx="5"/>
+    </g>
+    <g fill="#2E2E44">
+      <rect x="18" y="78" width="42" height="22" rx="5"/><rect x="68" y="78" width="34" height="22" rx="5"/>
+      <rect x="110" y="78" width="34" height="22" rx="5"/><rect x="152" y="78" width="34" height="22" rx="5"/>
+      <rect x="194" y="78" width="34" height="22" rx="5"/><rect x="236" y="78" width="34" height="22" rx="5"/>
+      <rect x="278" y="78" width="34" height="22" rx="5"/><rect x="320" y="78" width="32" height="22" rx="5"/>
+    </g>
+
+    <!-- Пробел -->
+    <rect x="96" y="108" width="176" height="18" rx="5" fill="#8B5CF6" opacity="0.85"/>
+    <rect x="18" y="108" width="68" height="18" rx="5" fill="#2E2E44"/>
+    <rect x="282" y="108" width="70" height="18" rx="5" fill="#2E2E44"/>
+  </g>
+
+  <circle cx="410" cy="52" r="6" fill="#22D3EE" opacity="0.8"/>
+  <circle cx="70" cy="42" r="5" fill="#8B5CF6"/>
+</svg>

@@ -1,0 +1,105 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Контакты — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Контакты</h1>
+      <p class="page-subtitle">Свяжитесь с нами — или оставьте сообщение через форму</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container contacts-layout">
+      <div class="contacts-info">
+        <div class="contact-card">
+          <span class="contact-card__icon">{% icon 'phone' 22 %}</span>
+          <div>
+            <h2 class="contact-card__title">Телефон</h2>
+            <p class="contact-card__text">+380 (00) 000-00-00</p>
+            <p class="contact-card__note">Демонстрационный номер — реальные звонки не принимаются.</p>
+          </div>
+        </div>
+
+        <div class="contact-card">
+          <span class="contact-card__icon">{% icon 'mail' 22 %}</span>
+          <div>
+            <h2 class="contact-card__title">Email</h2>
+            <p class="contact-card__text">demo@gamezone.example</p>
+            <p class="contact-card__note">Демонстрационный адрес учебного проекта.</p>
+          </div>
+        </div>
+
+        <div class="contact-card">
+          <span class="contact-card__icon">{% icon 'clock' 22 %}</span>
+          <div>
+            <h2 class="contact-card__title">Время работы</h2>
+            <p class="contact-card__text">Пн–Пт, 10:00–18:00</p>
+            <p class="contact-card__note">Расписание указано для демонстрации.</p>
+          </div>
+        </div>
+
+        <div class="contact-card">
+          <span class="contact-card__icon">{% icon 'headphones' 22 %}</span>
+          <div>
+            <h2 class="contact-card__title">Поддержка</h2>
+            <p class="contact-card__text">
+              Поможем разобраться с каталогом, корзиной и оформлением заказа
+              в рамках демонстрации магазина.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="contacts-form-col">
+        <form class="checkout-form" method="post" novalidate>
+          {% csrf_token %}
+          <h2 class="details-title">Форма обратной связи</h2>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert--error">
+              <span class="alert-icon">{% icon 'alert' %}</span>
+              <span>{{ form.non_field_errors }}</span>
+            </div>
+          {% endif %}
+
+          <div class="form-grid">
+            <div class="form-field{% if form.name.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.name.id_for_label }}">Имя <span class="req">*</span></label>
+              {{ form.name }}
+              {% if form.name.errors %}<p class="form-error">{{ form.name.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field{% if form.email.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.email.id_for_label }}">Email <span class="req">*</span></label>
+              {{ form.email }}
+              {% if form.email.errors %}<p class="form-error">{{ form.email.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.subject.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.subject.id_for_label }}">Тема <span class="req">*</span></label>
+              {{ form.subject }}
+              {% if form.subject.errors %}<p class="form-error">{{ form.subject.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.message.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.message.id_for_label }}">Сообщение <span class="req">*</span></label>
+              {{ form.message }}
+              {% if form.message.errors %}<p class="form-error">{{ form.message.errors|first }}</p>{% endif %}
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg" type="submit">
+            {% icon 'mail' 18 %} Отправить сообщение
+          </button>
+          <p class="form-note">
+            Отправка email не настроена: сообщения сохраняются в базе данных,
+            и это нормально для учебного проекта.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+{% endblock %}

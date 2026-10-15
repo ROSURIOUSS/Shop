@@ -1,0 +1,145 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}{{ product.name }} — GameZone{% endblock %}
+{% block meta_description %}{{ product.description|truncatewords:25 }}{% endblock %}
+
+{% block content %}
+  <section class="section section--tight">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Хлебные крошки">
+        <a href="{% url 'shop:home' %}">Главная</a>
+        {% icon 'chevron-right' 14 %}
+        <a href="{% url 'shop:catalog' %}">Каталог</a>
+        {% icon 'chevron-right' 14 %}
+        <a href="{{ product.category.get_absolute_url }}">{{ product.category.name }}</a>
+        {% icon 'chevron-right' 14 %}
+        <span>{{ product.name }}</span>
+      </nav>
+
+      <div class="product-layout">
+        <div class="product-gallery">
+          <div class="product-gallery__main">
+            <img id="gallery-main" src="{{ product.get_image_url }}" alt="{{ product.name }}">
+          </div>
+          <div class="product-gallery__thumbs">
+            <button class="gallery-thumb gallery-thumb--active" type="button"
+                    data-full="{{ product.get_image_url }}" aria-label="Основное изображение">
+              <img src="{{ product.get_image_url }}" alt="">
+            </button>
+            {% if product.image %}
+              <button class="gallery-thumb" type="button"
+                      data-full="{{ product.category.get_image_url }}" aria-label="Иллюстрация категории">
+                <img src="{{ product.category.get_image_url }}" alt="">
+              </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="product-info">
+          <span class="product-info__category">{{ product.category.name }}</span>
+          <h1 class="product-info__title">{{ product.name }}</h1>
+          <p class="product-info__price">{{ product.price|money }}</p>
+
+          {% if product.in_stock %}
+            <p class="stock stock--in stock--lg">{% icon 'check-circle' 18 %} В наличии ({{ product.stock }} шт.)</p>
+          {% else %}
+            <p class="stock stock--out stock--lg">{% icon 'alert' 18 %} Нет в наличии</p>
+          {% endif %}
+
+          <p class="product-info__desc">{{ product.description }}</p>
+
+          {% if product.in_stock %}
+            <form class="add-to-cart-form" action="{% url 'shop:cart_add' product.pk %}" method="post">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <div class="qty-picker" data-max="{{ product.stock }}">
+                <button class="qty-btn" type="button" data-qty="-1" aria-label="Уменьшить количество">{% icon 'minus' 16 %}</button>
+                <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ product.stock }}"
+                       aria-label="Количество">
+                <button class="qty-btn" type="button" data-qty="1" aria-label="Увеличить количество">{% icon 'plus' 16 %}</button>
+              </div>
+              <button class="btn btn-primary btn-lg" type="submit">
+                {% icon 'cart' 18 %} Добавить в корзину
+              </button>
+            </form>
+          {% else %}
+            <div class="out-of-stock-note">
+              {% icon 'info' 18 %}
+              <span>Товара сейчас нет в наличии — добавление недоступно.</span>
+            </div>
+          {% endif %}
+
+          <ul class="product-benefits">
+            <li>{% icon 'shield' 18 %} Данные заказа проверяются на сервере</li>
+            <li>{% icon 'truck' 18 %} Доставка и оплата — в разделе «О магазине»</li>
+            <li>{% icon 'card' 18 %> Цена фиксируется на момент оформления заказа</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="product-details">
+        <div class="details-col">
+          <h2 class="details-title">Описание</h2>
+          <p class="details-text">{{ product.description }}</p>
+
+          {% if product.get_specifications %}
+            <h2 class="details-title">Характеристики</h2>
+            <table class="spec-table">
+              <tbody>
+                {% for name, value in product.get_specifications %}
+                  <tr>
+                    <th scope="row">{{ name }}</th>
+                    <td>{{ value }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+
+        <aside class="details-col details-col--aside">
+          <h2 class="details-title">Наличие</h2>
+          <ul class="availability-list">
+            <li>
+              <span>Статус</span>
+              {% if product.in_stock %}
+                <span class="stock stock--in">В наличии</span>
+              {% else %}
+                <span class="stock stock--out">Нет в наличии</span>
+              {% endif %}
+            </li>
+            <li>
+              <span>Остаток на складе</span>
+              <strong>{{ product.stock }} шт.</strong>
+            </li>
+            <li>
+              <span>Категория</span>
+              <a href="{{ product.category.get_absolute_url }}">{{ product.category.name }}</a>
+            </li>
+            <li>
+              <span>Артикул</span>
+              <strong>SKU-{{ product.pk|stringformat:'05d' }}</strong>
+            </li>
+          </ul>
+        </aside>
+      </div>
+
+      {% if related_products %}
+        <div class="related">
+          <div class="section-head section-head--row">
+            <h2 class="section-title">Похожие товары</h2>
+            <a class="link-more" href="{{ product.category.get_absolute_url }}">
+              Все товары категории {% icon 'arrow-right' 16 %}
+            </a>
+          </div>
+          <div class="product-grid">
+            {% for product in related_products %}
+              {% include 'shop/includes/product_card.html' with product=product %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

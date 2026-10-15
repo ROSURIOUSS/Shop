@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 440" width="560" height="440">
+  <defs>
+    <linearGradient id="hero-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="hero-glow" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hero-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1B2A"/>
+      <stop offset="1" stop-color="#12121C"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="560" height="440" rx="28" fill="#101018"/>
+  <rect width="560" height="440" rx="28" fill="url(#hero-glow)"/>
+  <circle cx="280" cy="205" r="170" fill="none" stroke="#292936" stroke-width="2"/>
+  <circle cx="280" cy="205" r="128" fill="none" stroke="#8B5CF6" stroke-opacity="0.35" stroke-width="2"/>
+
+  <!-- Клавиатура -->
+  <g transform="translate(120 250) rotate(-8)">
+    <rect x="0" y="0" width="300" height="96" rx="14" fill="url(#hero-dark)" stroke="#292936" stroke-width="2"/>
+    <g fill="#22D3EE" opacity="0.75">
+      <rect x="18" y="16" width="26" height="18" rx="4"/>
+      <rect x="52" y="16" width="26" height="18" rx="4"/>
+      <rect x="86" y="16" width="26" height="18" rx="4" fill="#8B5CF6"/>
+      <rect x="120" y="16" width="26" height="18" rx="4"/>
+      <rect x="154" y="16" width="26" height="18" rx="4"/>
+      <rect x="188" y="16" width="26" height="18" rx="4" fill="#A78BFA"/>
+      <rect x="222" y="16" width="26" height="18" rx="4"/>
+      <rect x="256" y="16" width="26" height="18" rx="4"/>
+    </g>
+    <g fill="#3A3A52">
+      <rect x="18" y="42" width="26" height="18" rx="4"/>
+      <rect x="52" y="42" width="26" height="18" rx="4"/>
+      <rect x="86" y="42" width="26" height="18" rx="4"/>
+      <rect x="120" y="42" width="26" height="18" rx="4"/>
+      <rect x="154" y="42" width="26" height="18" rx="4"/>
+      <rect x="188" y="42" width="26" height="18" rx="4"/>
+      <rect x="222" y="42" width="26" height="18" rx="4"/>
+      <rect x="256" y="42" width="26" height="18" rx="4"/>
+    </g>
+    <rect x="70" y="68" width="160" height="16" rx="5" fill="#3A3A52"/>
+    <rect x="18" y="68" width="44" height="16" rx="5" fill="#8B5CF6" opacity="0.7"/>
+    <rect x="238" y="68" width="44" height="16" rx="5" fill="#8B5CF6" opacity="0.7"/>
+  </g>
+
+  <!-- Мышь -->
+  <g transform="translate(392 208) rotate(10)">
+    <path d="M22 8c-14 2-20 16-20 38 0 34 12 62 32 62s32-28 32-62c0-22-6-36-20-38-7-1-17-1-24 0z"
+          fill="url(#hero-dark)" stroke="#292936" stroke-width="2"/>
+    <path d="M34 20v22" stroke="#8B5CF6" stroke-width="3" stroke-linecap="round"/>
+    <rect x="28" y="22" width="12" height="20" rx="6" fill="#22D3EE" opacity="0.85"/>
+    <path d="M34 8v12" stroke="#292936" stroke-width="2"/>
+  </g>
+
+  <!-- Наушники -->
+  <g transform="translate(78 122) rotate(-12)">
+    <path d="M24 86V62c0-28 20-48 46-48s46 20 46 48v24" fill="none" stroke="url(#hero-grad)" stroke-width="10" stroke-linecap="round"/>
+    <rect x="8" y="74" width="32" height="46" rx="12" fill="url(#hero-dark)" stroke="#8B5CF6" stroke-width="3"/>
+    <rect x="100" y="74" width="32" height="46" rx="12" fill="url(#hero-dark)" stroke="#22D3EE" stroke-width="3"/>
+    <path d="M24 122c2 16 12 26 28 28" fill="none" stroke="#292936" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="54" cy="151" r="7" fill="#8B5CF6"/>
+  </g>
+
+  <!-- Декоративные элементы -->
+  <circle cx="468" cy="120" r="6" fill="#22D3EE"/>
+  <circle cx="92" cy="330" r="5" fill="#8B5CF6"/>
+  <circle cx="486" cy="330" r="4" fill="#A78BFA"/>
+  <path d="M420 84l6 12 12 6-12 6-6 12-6-12-12-6 12-6z" fill="#8B5CF6" opacity="0.7"/>
+</svg>

@@ -1,0 +1,89 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}О магазине — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">О GameZone</h1>
+      <p class="page-subtitle">
+        Концепция современного магазина игровых аксессуаров — учебный проект по Python и Django
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container about-layout">
+      <div class="about-copy">
+        <h2 class="details-title">Наша идея</h2>
+        <p class="details-text">
+          GameZone — это демонстрационный интернет-магазин игровой периферии, созданный
+          как учебный проект. Здесь реализована настоящая серверная логика: каталог на Django ORM,
+          поиск и фильтры, корзина на сессиях и оформление заказов с сохранением в SQLite.
+        </p>
+        <p class="details-text">
+          Мы не претендуем на роль реальной компании: все товары, цены и контакты на сайте —
+          демонстрационные. Проект показывает, как устроен современный интернет-магазин
+          «под капотом».
+        </p>
+
+        <h2 class="details-title" id="delivery">Доставка и оплата</h2>
+        <p class="details-text">
+          Раздел носит демонстрационный характер: реальные службы доставки и платёжные
+          системы не подключены. В учебной версии заказ просто сохраняется в базе данных,
+          а его статус администратор может менять в панели Django Admin.
+        </p>
+
+        <h2 class="details-title">Почему удобно выбирать у нас</h2>
+        <ul class="about-list">
+          <li>{% icon 'search' 18 %} Понятный каталог с поиском и фильтрами по цене и категориям</li>
+          <li>{% icon 'package' 18 %} Подробные карточки товаров с характеристиками</li>
+          <li>{% icon 'cart' 18 %} Корзина сохраняется на сервере — товары не потеряются</li>
+          <li>{% icon 'shield' 18 %} Оформление заказа защищено и проверяется на сервере</li>
+        </ul>
+      </div>
+
+      <div class="about-media">
+        <img src="{% static 'shop/images/hero.svg' %}" alt="Игровая периферия GameZone">
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Наши преимущества</h2>
+      </div>
+      <div class="features-grid">
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'sliders' 26 %}</span>
+          <h3 class="feature-title">Удобный выбор</h3>
+          <p class="feature-text">Фильтры по категориям, цене и сортировка помогают найти подходящее оборудование.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'zap' 26 %}</span>
+          <h3 class="feature-title">Быстрое оформление</h3>
+          <p class="feature-text">Короткая форма заказа и понятная сводка покупки.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'monitor' 26 %}</span>
+          <h3 class="feature-title">Честные характеристики</h3>
+          <p class="feature-text">Ключевые параметры каждого товара — в аккуратной таблице.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">{% icon 'headphones' 26 %}</span>
+          <h3 class="feature-title">Поддержка</h3>
+          <p class="feature-text">Форма обратной связи на странице контактов (демонстрационный режим).</p>
+        </article>
+      </div>
+
+      <div class="cta-banner cta-banner--center">
+        <h2 class="cta-title">Готов обновить свой сетап?</h2>
+        <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
+          Смотреть каталог {% icon 'arrow-right' 18 %}
+        </a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

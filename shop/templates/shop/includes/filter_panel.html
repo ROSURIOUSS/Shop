@@ -1,0 +1,49 @@
+{% load shop_extras %}
+<form class="filter-panel" method="get" action="{{ action_url }}">
+  <div class="filter-block">
+    <label class="filter-label" for="filter-q">{% icon 'search' 16 %} Поиск</label>
+    <input class="input" id="filter-q" type="search" name="q" value="{{ filters.q }}"
+           placeholder="Найти мышку, клавиатуру, наушники...">
+  </div>
+
+  {% if show_category_filter %}
+    <div class="filter-block">
+      <label class="filter-label" for="filter-category">{% icon 'package' 16 %} Категория</label>
+      <select class="input" id="filter-category" name="category">
+        <option value="">Все категории</option>
+        {% for category in categories %}
+          <option value="{{ category.slug }}" {% if filters.category == category.slug %}selected{% endif %}>
+            {{ category.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  {% endif %}
+
+  <div class="filter-block">
+    <label class="filter-label">{% icon 'card' 16 %} Цена, ₴</label>
+    <div class="price-range">
+      <input class="input" type="number" name="min_price" min="0" step="1"
+             value="{{ filters.min_price }}" placeholder="От" aria-label="Минимальная цена">
+      <span class="price-range__dash">—</span>
+      <input class="input" type="number" name="max_price" min="0" step="1"
+             value="{{ filters.max_price }}" placeholder="До" aria-label="Максимальная цена">
+    </div>
+  </div>
+
+  <div class="filter-block">
+    <label class="filter-label" for="filter-sort">{% icon 'sliders' 16 %} Сортировка</label>
+    <select class="input" id="filter-sort" name="sort">
+      {% for key, option in sort_options.items %}
+        <option value="{{ key }}" {% if filters.sort == key %}selected{% endif %}>{{ option.0 }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filter-actions">
+    <button class="btn btn-primary btn-block" type="submit">Применить</button>
+    <a class="btn btn-ghost btn-block" href="{{ reset_url }}">
+      {% icon 'rotate' 16 %} Сбросить фильтры
+    </a>
+  </div>
+</form>

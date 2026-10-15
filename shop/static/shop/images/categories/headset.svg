@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="h-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="h-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="h-glow" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#h-bg)"/>
+  <rect width="480" height="270" fill="url(#h-glow)"/>
+
+  <!-- Игровая гарнитура -->
+  <g transform="translate(140 30)">
+    <!-- Оголовье -->
+    <path d="M36 130V92c0-52 36-84 64-84s64 32 64 84v38"
+          fill="none" stroke="url(#h-accent)" stroke-width="16" stroke-linecap="round"/>
+    <path d="M44 128V94c0-46 30-74 56-74s56 28 56 74v34"
+          fill="none" stroke="#1C1C2C" stroke-width="10" stroke-linecap="round"/>
+
+    <!-- Левый наушник -->
+    <rect x="6" y="112" width="52" height="76" rx="20" fill="#1C1C2C" stroke="#8B5CF6" stroke-width="4"/>
+    <rect x="18" y="126" width="28" height="48" rx="12" fill="#0B0B10"/>
+    <path d="M22 150h20" stroke="#22D3EE" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Правый наушник -->
+    <rect x="142" y="112" width="52" height="76" rx="20" fill="#1C1C2C" stroke="#22D3EE" stroke-width="4"/>
+    <rect x="154" y="126" width="28" height="48" rx="12" fill="#0B0B10"/>
+    <path d="M158 150h20" stroke="#8B5CF6" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Микрофон -->
+    <path d="M32 188c2 26 16 42 40 46" fill="none" stroke="#292936" stroke-width="7" stroke-linecap="round"/>
+    <rect x="64" y="226" width="30" height="14" rx="7" fill="url(#h-accent)"/>
+  </g>
+
+  <circle cx="104" cy="64" r="6" fill="#22D3EE" opacity="0.8"/>
+  <circle cx="388" cy="200" r="5" fill="#8B5CF6"/>
+  <path d="M368 66l5 10 10 5-10 5-5 10-5-10-10-5 10-5z" fill="#A78BFA" opacity="0.7"/>
+</svg>

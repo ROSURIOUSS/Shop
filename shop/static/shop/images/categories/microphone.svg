@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <defs>
+    <linearGradient id="mc-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151F"/>
+      <stop offset="1" stop-color="#0E0E16"/>
+    </linearGradient>
+    <linearGradient id="mc-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="mc-glow" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#8B5CF6" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="270" fill="url(#mc-bg)"/>
+  <rect width="480" height="270" fill="url(#mc-glow)"/>
+
+  <!-- Микрофон -->
+  <g transform="translate(196 26)">
+    <!-- Капсула -->
+    <rect x="18" y="0" width="60" height="112" rx="30" fill="#1C1C2C" stroke="url(#mc-accent)" stroke-width="4"/>
+    <g stroke="#3A3A52" stroke-width="4" stroke-linecap="round">
+      <path d="M32 26h32"/><path d="M32 42h32"/><path d="M32 58h32"/><path d="M32 74h32"/>
+    </g>
+    <!-- Корпус -->
+    <rect x="28" y="112" width="40" height="26" rx="8" fill="#0B0B10" stroke="#292936" stroke-width="3"/>
+    <!-- Стойка -->
+    <rect x="43" y="138" width="10" height="56" rx="5" fill="#292936"/>
+    <!-- Основание -->
+    <rect x="4" y="192" width="88" height="16" rx="8" fill="#1C1C2C" stroke="#8B5CF6" stroke-width="3"/>
+    <!-- Подсветка -->
+    <circle cx="48" cy="125" r="5" fill="#22D3EE"/>
+  </g>
+
+  <!-- Звуковые волны -->
+  <g stroke="#22D3EE" stroke-width="4" stroke-linecap="round" opacity="0.65" fill="none">
+    <path d="M136 92c-10 12-10 42 0 54"/>
+    <path d="M114 78c-18 22-18 70 0 92"/>
+  </g>
+  <g stroke="#8B5CF6" stroke-width="4" stroke-linecap="round" opacity="0.65" fill="none">
+    <path d="M344 92c10 12 10 42 0 54"/>
+    <path d="M366 78c18 22 18 70 0 92"/>
+  </g>
+
+  <circle cx="112" cy="52" r="5" fill="#8B5CF6" opacity="0.8"/>
+  <circle cx="382" cy="212" r="6" fill="#22D3EE" opacity="0.8"/>
+</svg>

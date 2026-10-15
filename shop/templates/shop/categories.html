@@ -1,0 +1,37 @@
+{% extends 'shop/base.html' %}
+{% load static shop_extras %}
+
+{% block title %}Категории товаров — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Категории</h1>
+      <p class="page-subtitle">Выбери направление — от мышек до аксессуаров для игрового ПК</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      <div class="category-grid category-grid--page">
+        {% for category in categories %}
+          <article class="category-card">
+            <a class="category-card__media" href="{{ category.get_absolute_url }}">
+              <img src="{{ category.get_image_url }}" alt="{{ category.name }}" loading="lazy">
+            </a>
+            <div class="category-card__body">
+              <h2 class="category-card__title">{{ category.name }}</h2>
+              <p class="category-card__desc">{{ category.description }}</p>
+              <p class="category-card__count">{{ category.product_count }} товаров</p>
+              <a class="btn btn-primary" href="{{ category.get_absolute_url }}">
+                Открыть категорию {% icon 'arrow-right' 16 %}
+              </a>
+            </div>
+          </article>
+        {% empty %}
+          <p class="empty-note">Категории ещё не созданы. Заполните базу командой <code>python manage.py seed_data</code>.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

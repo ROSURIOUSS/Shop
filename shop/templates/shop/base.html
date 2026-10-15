@@ -1,0 +1,123 @@
+{% load static shop_extras %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}GameZone — интернет-магазин игровых аксессуаров{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}GameZone — учебный интернет-магазин игровых мышек, клавиатур, наушников и аксессуаров.{% endblock %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'shop/images/logo.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'shop/css/style.css' %}">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="{% url 'shop:home' %}" aria-label="GameZone — на главную">
+        <img class="logo-mark" src="{% static 'shop/images/logo.svg' %}" alt="" width="36" height="36">
+        <span class="logo-text">Game<span class="logo-accent">Zone</span></span>
+      </a>
+
+      <nav class="main-nav" id="main-nav" aria-label="Основная навигация">
+        <a class="nav-link" href="{% url 'shop:home' %}">Главная</a>
+        <a class="nav-link" href="{% url 'shop:catalog' %}">Каталог</a>
+        <a class="nav-link" href="{% url 'shop:categories' %}">Категории</a>
+        <a class="nav-link" href="{% url 'shop:about' %}">О магазине</a>
+        <a class="nav-link" href="{% url 'shop:contacts' %}">Контакты</a>
+      </nav>
+
+      <div class="header-actions">
+        <button class="icon-btn" id="search-toggle" type="button" aria-label="Открыть поиск" aria-expanded="false">
+          {% icon 'search' %}
+        </button>
+        <a class="icon-btn cart-btn" href="{% url 'shop:cart' %}" aria-label="Корзина, товаров: {{ cart_item_count }}">
+          {% icon 'cart' %}
+          <span class="cart-count{% if cart_item_count %} cart-count--filled{% endif %}">{{ cart_item_count }}</span>
+        </a>
+        <button class="icon-btn burger-btn" id="nav-toggle" type="button" aria-label="Открыть меню" aria-expanded="false">
+          {% icon 'menu' %}
+        </button>
+      </div>
+    </div>
+
+    <div class="search-panel" id="search-panel" hidden>
+      <form class="container search-form" action="{% url 'shop:catalog' %}" method="get" role="search">
+        <input class="search-input" type="search" name="q" placeholder="Найти мышку, клавиатуру, наушники..." value="{{ request.GET.q|default:'' }}" aria-label="Поиск по каталогу">
+        <button class="btn btn-primary" type="submit">Найти</button>
+      </form>
+    </div>
+  </header>
+
+  <div class="mobile-nav-backdrop" id="nav-backdrop" hidden></div>
+
+  <main class="site-main">
+    {% if messages %}
+      <div class="container messages">
+        {% for message in messages %}
+          <div class="alert alert--{{ message.tags|default:'info' }}">
+            <span class="alert-icon">
+              {% if message.tags == 'success' %}{% icon 'check-circle' %}{% elif message.tags == 'error' %}{% icon 'alert' %}{% else %}{% icon 'info' %}{% endif %}
+            </span>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="footer-col footer-about">
+        <a class="logo" href="{% url 'shop:home' %}">
+          <img class="logo-mark" src="{% static 'shop/images/logo.svg' %}" alt="" width="32" height="32">
+          <span class="logo-text">Game<span class="logo-accent">Zone</span></span>
+        </a>
+        <p class="footer-text">
+          Учебный интернет-магазин игровых аксессуаров: мышки, клавиатуры, наушники
+          и всё для комфортного игрового сетапа.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-title">Магазин</h4>
+        <ul class="footer-links">
+          <li><a href="{% url 'shop:catalog' %}">Каталог</a></li>
+          <li><a href="{% url 'shop:categories' %}">Категории</a></li>
+          <li><a href="{% url 'shop:catalog' %}?sort=new">Новинки</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-title">Информация</h4>
+        <ul class="footer-links">
+          <li><a href="{% url 'shop:about' %}">О магазине</a></li>
+          <li><a href="{% url 'shop:contacts' %}">Контакты</a></li>
+          <li><a href="{% url 'shop:about' %}#delivery">Доставка и оплата</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-title">Контакты</h4>
+        <ul class="footer-contacts">
+          <li>{% icon 'mail' 18 %} <span>demo@gamezone.example</span></li>
+          <li>{% icon 'phone' 18 %} <span>+380 (00) 000-00-00 — демо</span></li>
+          <li>{% icon 'clock' 18 %} <span>Пн–Пт, 10:00–18:00 (демо-режим)</span></li>
+        </ul>
+        <p class="footer-note">Контактные данные указаны для демонстрации учебного проекта.</p>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <p>© {% now "Y" %} GameZone. Учебный проект по Python и Django.</p>
+      <p>Все товары и цены приведены исключительно в демонстрационных целях.</p>
+    </div>
+  </footer>
+
+  <script src="{% static 'shop/js/main.js' %}"></script>
+</body>
+</html>
