@@ -12,18 +12,29 @@ echo  ==============================================
 echo.
 
 rem ---------- 1. Проверка Python ----------
+rem Сначала пробуем лаунчер py, затем python.
+rem Проверяем именно запуск команды, а не where: подставла Microsoft Store
+rem (WindowsApps\python.exe) находится в PATH, но не является настоящим Python.
+set "PYTHON=py"
+%PYTHON% --version >nul 2>&1
+if not errorlevel 1 goto have_python
 set "PYTHON=python"
-where python >nul 2>&1
-if errorlevel 1 set "PYTHON=py"
-where %PYTHON% >nul 2>&1
-if errorlevel 1 (
-    echo  [ОШИБКА] Python не найден.
-    echo  Установите Python 3.10+ с https://www.python.org/downloads/
-    echo  и обязательно отметьте галочку "Add Python to PATH".
-    echo.
-    pause
-    exit /b 1
-)
+%PYTHON% --version >nul 2>&1
+if not errorlevel 1 goto have_python
+
+echo  [ОШИБКА] Python не найден или не запускается.
+echo  Установите Python 3.10+ с https://www.python.org/downloads/
+echo  и отметьте галочку "Add Python to PATH".
+echo  Если была ошибка про WindowsApps\python.exe — это подставла
+echo  Microsoft Store, а не настоящий Python: нужен python.org.
+echo.
+pause
+exit /b 1
+
+:have_python
+echo  Найден Python-лаунчер: %PYTHON%
+%PYTHON% --version
+echo.
 
 rem ---------- 2. Виртуальное окружение ----------
 if not exist ".venv\Scripts\python.exe" (
@@ -79,3 +90,4 @@ echo.
 echo  Сервер остановлен. Нажмите любую клавишу для выхода.
 pause >nul
 endlocal
+exit /b 0

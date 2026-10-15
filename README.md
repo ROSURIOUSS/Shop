@@ -60,8 +60,12 @@
 3. Создайте виртуальное окружение:
 
    ```
-   python -m venv .venv
+   py -m venv .venv
    ```
+
+   Если лаунчер `py` не работает, используйте `python -m venv .venv`.
+   Если `python` выводит ошибку про `WindowsApps\python.exe` — это подставла
+   Microsoft Store, а не настоящий Python: установите Python с python.org.
 
 4. Активируйте окружение:
 
