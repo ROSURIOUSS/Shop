@@ -311,7 +311,19 @@ PRODUCTS = [
 class Command(BaseCommand):
     help = 'Заполнить базу демонстрационными категориями и товарами (безопасно при повторном запуске).'
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--if-empty',
+            action='store_true',
+            help='Заполнять только если в базе ещё нет ни одного товара '
+                 '(сохраняет правки, сделанные через админ-панель).',
+        )
+
     def handle(self, *args, **options):
+        if options['if_empty'] and Product.objects.exists():
+            self.stdout.write('В базе уже есть товары — заполнение пропущено.')
+            return
+
         created_categories = 0
         for data in CATEGORIES:
             category, created = Category.objects.get_or_create(
