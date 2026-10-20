@@ -1,4 +1,5 @@
 """Настройка административной панели GameZone."""
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponseNotAllowed, HttpResponseRedirect
@@ -151,10 +152,33 @@ class ProductAdmin(CsvExportMixin, admin.ModelAdmin):
         return form
 
 
+class CouponAdminForm(forms.ModelForm):
+    """Форма промокода: код проверяется в том виде, в каком попадёт в базу."""
+
+    class Meta:
+        model = Coupon
+        fields = '__all__'
+
+    def clean_code(self):
+        """Нормализовать код и заранее отклонить повтор без учёта регистра."""
+        code = Coupon.normalize_code(self.cleaned_data['code'])
+        if not code:
+            return code
+        duplicate = Coupon.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError(
+                f'Промокод «{code}» уже существует — выберите другой код.'
+            )
+        return code
+
+
 @admin.register(Coupon)
 class CouponAdmin(CsvExportMixin, admin.ModelAdmin):
     """Промокоды: скидка, срок действия и лимит применений."""
 
+    form = CouponAdminForm
     list_display = (
         'code', 'kind', 'value', 'min_total', 'valid_until',
         'usage_limit', 'used_count', 'is_active',

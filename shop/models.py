@@ -1,4 +1,5 @@
 """Модели интернет-магазина GameZone."""
+import re
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
 
@@ -12,6 +13,12 @@ from django.templatetags.static import static
 
 
 LOW_STOCK_THRESHOLD = 5
+
+COUPON_CODE_RE = re.compile(r'[A-ZА-ЯЁІЇЄҐ0-9_-]{2,32}')
+
+COUPON_CODE_ERROR = (
+    'Код состоит из букв, цифр, дефиса и подчёркивания — от 2 до 32 символов.'
+)
 
 REVIEW_TEXT_LIMIT = 2000
 
@@ -194,8 +201,24 @@ class Coupon(models.Model):
     def __str__(self):
         return f'{self.code} — {self.get_kind_display()}: {self.value}'
 
+    @staticmethod
+    def normalize_code(value):
+        """Привести код к единому виду: без пробелов и в верхнем регистре."""
+        return ''.join(str(value or '').split()).upper()
+
+    def clean(self):
+        """Проверить код до записи в базу, чтобы не ловить IntegrityError.
+
+        Ввод вроде «Шкафифи» приводится к «ШКАФИФИ» заранее, поэтому проверка
+        уникальности сравнивает уже нормализованное значение.
+        """
+        super().clean()
+        self.code = self.normalize_code(self.code)
+        if self.code and not COUPON_CODE_RE.fullmatch(self.code):
+            raise ValidationError({'code': COUPON_CODE_ERROR})
+
     def save(self, *args, **kwargs):
-        self.code = self.code.strip().upper()
+        self.code = self.normalize_code(self.code)
         super().save(*args, **kwargs)
 
     def is_available(self, now=None):

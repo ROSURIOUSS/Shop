@@ -6,7 +6,16 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.forms import PasswordChangeForm as DjangoPasswordChangeForm
 
-from .models import REVIEW_TEXT_LIMIT, ContactMessage, Order, Profile, Review
+from .models import (
+    COUPON_CODE_ERROR,
+    COUPON_CODE_RE,
+    REVIEW_TEXT_LIMIT,
+    ContactMessage,
+    Coupon,
+    Order,
+    Profile,
+    Review,
+)
 
 User = get_user_model()
 
@@ -305,12 +314,10 @@ class CouponForm(forms.Form):
     )
 
     def clean_code(self):
-        """Код приводится к верхнему регистру и без пробелов по краям."""
-        code = self.cleaned_data['code'].strip().upper()
+        """Код приводится к тому же виду, что и в базе: без пробелов, заглавными."""
+        code = Coupon.normalize_code(self.cleaned_data['code'])
         if not code:
             raise forms.ValidationError('Введите промокод.')
-        if not re.fullmatch(r'[A-Z0-9_-]{2,32}', code):
-            raise forms.ValidationError(
-                'Код состоит из латинских букв, цифр, дефиса и подчёркивания.'
-            )
+        if not COUPON_CODE_RE.fullmatch(code):
+            raise forms.ValidationError(COUPON_CODE_ERROR)
         return code

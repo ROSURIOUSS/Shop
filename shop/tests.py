@@ -1569,6 +1569,86 @@ class CouponModelTests(TestCase):
         self.assertEqual(coupon.unavailable_reason(), '')
 
 
+class CouponCodeValidationTests(TestCase):
+    """Код проверяется до записи в базу, повторы ловятся без учёта регистра."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.admin = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.client.force_login(self.admin)
+        self.coupon = Coupon.objects.create(
+            code='Шкафифи', kind=Coupon.Kind.PERCENT, value=Decimal('50'),
+        )
+
+    def add_coupon(self, **overrides):
+        data = {
+            'code': 'Акция50',
+            'kind': Coupon.Kind.PERCENT,
+            'value': '15',
+            'min_total': '0',
+            'is_active': 'on',
+            '_save': 'Сохранить',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('admin:shop_coupon_add'), data)
+
+    def test_saved_code_is_uppercase(self):
+        self.assertEqual(self.coupon.code, 'ШКАФИФИ')
+
+    def test_duplicate_in_another_register_is_rejected_by_model(self):
+        coupon = Coupon(code='шкафифи ', kind=Coupon.Kind.PERCENT, value=Decimal('5'))
+        with self.assertRaises(ValidationError) as error:
+            coupon.full_clean()
+        self.assertIn('code', error.exception.message_dict)
+        self.assertIn('уже существует', error.exception.message_dict['code'][0].lower())
+
+    def test_model_clean_normalises_cyrillic_code(self):
+        coupon = Coupon(code=' акция 50 ', kind=Coupon.Kind.PERCENT, value=Decimal('5'))
+        coupon.full_clean()
+        self.assertEqual(coupon.code, 'АКЦИЯ50')
+
+    def test_model_clean_rejects_forbidden_characters(self):
+        coupon = Coupon(code='Акция 50!', kind=Coupon.Kind.PERCENT, value=Decimal('5'))
+        with self.assertRaises(ValidationError):
+            coupon.full_clean()
+
+    def test_admin_add_duplicate_shows_error_instead_of_crash(self):
+        response = self.add_coupon(code='шкафифи')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже существует')
+        self.assertEqual(Coupon.objects.count(), 1)
+
+    def test_admin_add_duplicate_with_spaces(self):
+        response = self.add_coupon(code=' ШКАФИФИ ')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже существует')
+        self.assertEqual(Coupon.objects.count(), 1)
+
+    def test_admin_add_new_cyrillic_coupon(self):
+        response = self.add_coupon(code='Акция50')
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Coupon.objects.filter(code='АКЦИЯ50').exists())
+
+    def test_admin_add_forbidden_characters(self):
+        response = self.add_coupon(code='Акция 50!')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Код состоит из букв')
+        self.assertFalse(Coupon.objects.filter(code__startswith='АКЦИЯ').exists())
+
+    def test_storefront_accepts_code_in_any_register(self):
+        category = make_category()
+        product = make_product(category, price=Decimal('1000'), stock=10)
+        self.client.post(reverse('shop:cart_add', args=[product.pk]), {'quantity': 2})
+        response = self.client.post(
+            reverse('shop:coupon_apply'), {'code': 'шкафифи'}, follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session['coupon_code'], 'ШКАФИФИ')
+        self.assertContains(response, 'применён')
+
+
 class CartCouponTests(TestCase):
     """Применение промокода в корзине: всё проверяется на сервере."""
 
@@ -1630,7 +1710,7 @@ class CartCouponTests(TestCase):
         self.add_to_cart()
         response = self.apply('промокод!')
         self.assertNotIn('coupon_code', self.client.session)
-        self.assertContains(response, 'латинских букв')
+        self.assertContains(response, 'Код состоит из букв')
 
     def test_coupon_can_be_removed(self):
         self.add_to_cart()
