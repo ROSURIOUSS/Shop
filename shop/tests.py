@@ -1438,3 +1438,63 @@ class LowStockAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'товар заканчивается')
         self.assertContains(response, f'при остатке {LOW_STOCK_THRESHOLD} шт.')
+
+
+class TemplateIntegrityTests(TestCase):
+    """Шаблоны не содержат незакрытых тегов и не выводят их как текст."""
+
+    def template_files(self):
+        shop_dir = Path(__file__).resolve().parent
+        project_dir = shop_dir.parent
+        files = sorted((shop_dir / 'templates').rglob('*.html'))
+        files += sorted((project_dir / 'templates').rglob('*.html'))
+        self.assertTrue(files, 'шаблоны не найдены')
+        return files
+
+    def test_tags_are_balanced(self):
+        for path in self.template_files():
+            text = path.read_text(encoding='utf-8')
+            for open_tag, close_tag in (('{%', '%}'), ('{{', '}}'), ('{#', '#}')):
+                self.assertEqual(
+                    text.count(open_tag), text.count(close_tag),
+                    f'{path.name}: «{open_tag}» и «{close_tag}» не совпадают',
+                )
+            self.assertNotIn('%>', text, f'{path.name}: «%>» вместо «%}}»')
+            self.assertNotIn('}}', text.replace('{{', '').replace('}}', ''),
+                             f'{path.name}: лишняя «}}}}»')
+
+    def test_public_pages_render_without_literal_tags(self):
+        pages = (
+            'shop:home', 'shop:catalog', 'shop:categories', 'shop:about',
+            'shop:contacts', 'shop:cart', 'shop:login', 'shop:register',
+        )
+        for name in pages:
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200, name)
+            html = response.content.decode()
+            self.assertNotIn('{%', html, f'{name}: тег выведен как текст')
+            self.assertNotIn('{{', html, f'{name}: переменная выведена как текст')
+
+    def test_product_page_renders_all_icons(self):
+        product = make_product(make_category())
+        response = self.client.get(product.get_absolute_url())
+        html = response.content.decode()
+        self.assertNotIn('{%', html)
+        self.assertNotIn('{{', html)
+        self.assertNotIn('%>', html)
+        self.assertIn('Цена фиксируется на момент оформления заказа', html)
+        self.assertIn('Данные заказа проверяются на сервере', html)
+
+    def test_authenticated_pages_render_without_literal_tags(self):
+        product = make_product(make_category(), stock=5)
+        user = get_user_model().objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.client.force_login(user)
+        self.client.post(reverse('shop:cart_add', args=[product.pk]), {'quantity': 1})
+        for name in ('shop:profile', 'shop:profile_edit', 'shop:password_change', 'shop:checkout', 'shop:cart'):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200, name)
+            html = response.content.decode()
+            self.assertNotIn('{%', html, f'{name}: тег выведен как текст')
+            self.assertNotIn('{{', html, f'{name}: переменная выведена как текст')
