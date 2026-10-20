@@ -1,8 +1,14 @@
 """Базовые тесты моделей, корзины и оформления заказа."""
+import os
+import re
 from decimal import Decimal
+from io import StringIO
+from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.core.management import call_command
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .cart import Cart
@@ -232,3 +238,135 @@ class ViewTests(TestCase):
         self.assertEqual(len(response.context['products']), 12)
         response_page_2 = self.client.get(reverse('shop:catalog'), {'page': 2})
         self.assertEqual(len(response_page_2.context['products']), 5)
+
+
+class EnsureAdminCommandTests(TestCase):
+    """Команда ensure_admin нужна при публикации сайта на хостинге:
+    там база каждый раз пустая, а интерактивный createsuperuser запустить некому.
+    """
+
+    def run_command(self, **env):
+        """Запускает команду с заданными переменными окружения."""
+        environment = {
+            'DJANGO_SUPERUSER_USERNAME': '',
+            'DJANGO_SUPERUSER_PASSWORD': '',
+            'DJANGO_SUPERUSER_EMAIL': '',
+        }
+        environment.update(env)
+        out = StringIO()
+        with mock.patch.dict(os.environ, environment):
+            call_command('ensure_admin', stdout=out)
+        return out.getvalue()
+
+    def test_creates_superuser_from_env(self):
+        output = self.run_command(
+            DJANGO_SUPERUSER_USERNAME='deploy_admin',
+            DJANGO_SUPERUSER_PASSWORD='strong-pass-2026',
+        )
+        user = get_user_model().objects.get(username='deploy_admin')
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.check_password('strong-pass-2026'))
+        self.assertEqual(user.email, 'deploy_admin@gamezone.local')
+        self.assertIn('создан', output)
+
+    def test_skips_when_env_variables_are_not_set(self):
+        output = self.run_command()
+        self.assertEqual(get_user_model().objects.count(), 0)
+        self.assertIn('не заданы', output)
+
+    def test_skips_when_superuser_already_exists(self):
+        get_user_model().objects.create_superuser('first', 'first@gamezone.local', 'pass-1')
+        output = self.run_command(
+            DJANGO_SUPERUSER_USERNAME='second',
+            DJANGO_SUPERUSER_PASSWORD='pass-2',
+        )
+        self.assertFalse(get_user_model().objects.filter(username='second').exists())
+        self.assertIn('пропущено', output)
+
+    def test_does_not_overwrite_existing_regular_user(self):
+        get_user_model().objects.create_user('buyer', 'buyer@example.com', 'pass-1')
+        self.run_command(
+            DJANGO_SUPERUSER_USERNAME='buyer',
+            DJANGO_SUPERUSER_PASSWORD='pass-2',
+        )
+        user = get_user_model().objects.get(username='buyer')
+        self.assertFalse(user.is_superuser)
+        self.assertTrue(user.check_password('pass-1'))
+
+
+class ProductionSecurityTests(TestCase):
+    """Так сайт работает на хостинге: DEBUG=False, свой домен и HTTPS."""
+
+    domain = 'gamezone.example'
+    origin = 'https://gamezone.example'
+
+    def setUp(self):
+        self.category = make_category()
+        self.product = make_product(self.category, slug='prod-mouse')
+        override = override_settings(
+            DEBUG=False,
+            ALLOWED_HOSTS=[self.domain],
+            CSRF_TRUSTED_ORIGINS=[self.origin],
+        )
+        override.enable()
+        self.addCleanup(override.disable)
+        # Обычный тестовый клиент не проверяет CSRF, поэтому берём клиент
+        # с настоящей проверкой — как на боевом сервере.
+        self.client = Client(enforce_csrf_checks=True)
+
+    def csrf_token(self):
+        """Достаёт CSRF-токен из формы на странице товара."""
+        response = self.client.get(
+            reverse('shop:product_detail', args=[self.product.pk]),
+            HTTP_HOST=self.domain,
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        match = re.search(
+            r'name="csrfmiddlewaretoken" value="([^"]+)"',
+            response.content.decode(),
+        )
+        self.assertIsNotNone(match, 'в форме нет поля csrfmiddlewaretoken')
+        return match.group(1)
+
+    def post_to_cart(self, origin, referer, token='skip'):
+        data = {'quantity': 1}
+        if token == 'skip':
+            # Сначала заходим на страницу, чтобы в клиенте появилась
+            # csrf-cookie, но сам токен в форму не кладём.
+            token = self.csrf_token()
+        elif token:
+            data['csrfmiddlewaretoken'] = token
+        else:
+            self.csrf_token()
+        return self.client.post(
+            reverse('shop:cart_add', args=[self.product.pk]),
+            data,
+            HTTP_HOST=self.domain,
+            HTTP_ORIGIN=origin,
+            HTTP_REFERER=referer,
+            secure=True,
+        )
+
+    def test_post_from_trusted_origin_is_accepted(self):
+        referer = f'{self.origin}/product/{self.product.pk}/'
+        response = self.post_to_cart(self.origin, referer, token=self.csrf_token())
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(str(self.product.pk), self.client.session['cart'])
+
+    def test_post_from_foreign_origin_is_rejected(self):
+        referer = f'{self.origin}/product/{self.product.pk}/'
+        response = self.post_to_cart('https://evil.example', referer,
+                                     token=self.csrf_token())
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.client.session.get('cart'))
+
+    def test_post_without_token_is_rejected(self):
+        referer = f'{self.origin}/product/{self.product.pk}/'
+        response = self.post_to_cart(self.origin, referer, token='')
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.client.session.get('cart'))
+
+    def test_foreign_host_is_rejected(self):
+        response = self.client.get(reverse('shop:home'), HTTP_HOST='evil.example')
+        self.assertEqual(response.status_code, 400)

@@ -1,0 +1,14 @@
+# Зависимости для публикации сайта в интернете (Render, Railway, VPS).
+# Локально на Windows они не нужны — run.bat ставит обычный requirements.txt.
+-r requirements.txt
+
+# WSGI-сервер: держит Django запущенным и принимает запросы от хостинга.
+gunicorn>=22.0
+
+# Раздаёт CSS/JS/картинки без nginx (обязательно при DEBUG=False).
+whitenoise>=6.7
+
+# Подключение PostgreSQL через переменную DJANGO_DATABASE_URL.
+# Если остаётесь на SQLite — эти два пакета просто не используются.
+dj-database-url>=2.2
+psycopg2-binary>=2.9
