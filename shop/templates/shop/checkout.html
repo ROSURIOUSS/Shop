@@ -108,9 +108,18 @@
           {% endfor %}
         </ul>
         <div class="summary-divider"></div>
+        {% if discount %}
+          <div class="summary-row summary-row--discount">
+            <span>
+              Скидка по промокоду
+              {% if coupon %}<strong class="coupon-code">{{ coupon.code }}</strong>{% endif %}
+            </span>
+            <strong class="discount-value">−{{ discount|money }}</strong>
+          </div>
+        {% endif %}
         <div class="summary-row summary-row--total">
-          <span>Итого</span>
-          <strong class="price price--lg">{{ cart_total|money }}</strong>
+          <span>Итого{% if discount %} со скидкой{% endif %}</span>
+          <strong class="price price--lg">{{ payable_total|money }}</strong>
         </div>
         <a class="btn btn-ghost btn-block" href="{% url 'shop:cart' %}">
           {% icon 'arrow-left' 16 %} Вернуться в корзину

@@ -8,9 +8,12 @@ from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
 
-from .models import Product
+from .models import Coupon, Product
 
 SESSION_KEY = 'cart'
+COUPON_KEY = 'coupon_code'
+FAVORITES_KEY = 'favorites'
+FAVORITES_LIMIT = 60
 
 
 class Cart:
@@ -53,9 +56,10 @@ class Cart:
             self.save()
 
     def clear(self):
-        """Полностью очистить корзину."""
+        """Полностью очистить корзину и снять промокод."""
         self.cart.clear()
         self.session[SESSION_KEY] = self.cart
+        self.session.pop(COUPON_KEY, None)
         self.save()
 
     def __iter__(self):
@@ -93,6 +97,66 @@ class Cart:
 
     def is_empty(self):
         return len(self.cart) == 0
+
+    def get_coupon(self):
+        """Действующий промокод сессии или None, если он больше не подходит."""
+        code = self.session.get(COUPON_KEY)
+        if not code:
+            return None
+        coupon = Coupon.objects.filter(code=code).first()
+        if coupon is None or not coupon.is_available():
+            self.session.pop(COUPON_KEY, None)
+            return None
+        return coupon
+
+    def apply_coupon(self, coupon):
+        """Запомнить промокод в сессии: код проверяется на сервере."""
+        self.session[COUPON_KEY] = coupon.code
+        self.save()
+
+    def remove_coupon(self):
+        """Снять промокод с корзины."""
+        self.session.pop(COUPON_KEY, None)
+        self.save()
+
+    def get_discount(self):
+        """Скидка по промокоду для текущей суммы корзины."""
+        coupon = self.get_coupon()
+        if coupon is None:
+            return Decimal('0.00')
+        return coupon.discount_for(self.get_total_price())
+
+    def get_payable_total(self):
+        """Итог к оплате: сумма товаров за вычетом скидки."""
+        return self.get_total_price() - self.get_discount()
+
+
+def get_favorites(request):
+    """Список id товаров в избранном у текущей сессии."""
+    raw = request.session.get(FAVORITES_KEY, [])
+    favorites = []
+    for value in raw:
+        try:
+            favorites.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return favorites
+
+
+def toggle_favorite(request, product):
+    """Добавить товар в избранное или убрать его оттуда."""
+    favorites = get_favorites(request)
+    if product.pk in favorites:
+        favorites.remove(product.pk)
+        added = False
+    else:
+        if len(favorites) >= FAVORITES_LIMIT:
+            favorites.pop(0)
+        favorites.append(product.pk)
+        added = True
+    request.session[FAVORITES_KEY] = favorites
+    request.session.modified = True
+    return added
 
 
 def get_product_or_404(product_id):

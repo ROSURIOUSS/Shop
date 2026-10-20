@@ -1,0 +1,131 @@
+{% extends 'shop/base.html' %}
+{% load shop_extras %}
+
+{% block title %}Заказ {{ order.order_number }} — GameZone{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Хлебные крошки">
+        <a href="{% url 'shop:home' %}">Главная</a>
+        {% icon 'chevron-right' 14 %}
+        <a href="{% url 'shop:profile' %}">Личный кабинет</a>
+        {% icon 'chevron-right' 14 %}
+        <span>{{ order.order_number }}</span>
+      </nav>
+      <h1 class="page-title">Заказ {{ order.order_number }}</h1>
+      <p class="page-subtitle">Оформлен {{ order.created_at|date:"d.m.Y, H:i" }}</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container order-layout">
+      <div class="order-main">
+        <div class="profile-panel">
+          <div class="profile-panel__head">
+            <h2 class="details-title">{% icon 'history' 20 %} Статус заказа</h2>
+            <span class="status-badge status-badge--{{ order.status }}">{{ order.get_status_display }}</span>
+          </div>
+
+          <ol class="order-timeline">
+            {% for step in order.status_timeline %}
+              <li class="order-timeline__step order-timeline__step--{{ step.state }}">
+                <span class="order-timeline__dot">
+                  {% if step.state == 'done' %}{% icon 'check' 13 %}
+                  {% elif step.state == 'cancelled' %}{% icon 'x' 13 %}
+                  {% else %}{% icon 'clock' 13 %}{% endif %}
+                </span>
+                <span class="order-timeline__label">{{ step.label }}</span>
+              </li>
+            {% endfor %}
+          </ol>
+
+          {% if order.can_be_cancelled %}
+            <form action="{% url 'shop:order_cancel' order.order_number %}" method="post"
+                  data-confirm="Отменить заказ {{ order.order_number }}? Товары вернутся на склад.">
+              {% csrf_token %}
+              <button class="btn btn-ghost btn-danger-text" type="submit">
+                {% icon 'x' 16 %} Отменить заказ
+              </button>
+            </form>
+          {% elif order.status == 'cancelled' %}
+            <p class="form-note">Заказ отменён, товары возвращены на склад.</p>
+          {% else %}
+            <p class="form-note">
+              Заказ уже передан в доставку — отменить его можно только через поддержку.
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="profile-panel">
+          <h2 class="details-title">{% icon 'package' 20 %} Состав заказа</h2>
+          <ul class="order-card__items">
+            {% for item in order.items.all %}
+              <li class="order-line">
+                <a class="order-line__name" href="{{ item.product.get_absolute_url }}">{{ item.product.name }}</a>
+                <span class="order-line__meta">{{ item.quantity }} шт. × {{ item.price|money }}</span>
+                <strong class="order-line__sum">{{ item.get_cost|money }}</strong>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="summary-divider"></div>
+          <div class="summary-row">
+            <span>Товары</span>
+            <strong>{{ order.get_total_cost|money }}</strong>
+          </div>
+          {% if order.discount_amount %}
+            <div class="summary-row summary-row--discount">
+              <span>
+                Скидка
+                {% if order.coupon %}<strong class="coupon-code">{{ order.coupon.code }}</strong>{% endif %}
+              </span>
+              <strong class="discount-value">−{{ order.discount_amount|money }}</strong>
+            </div>
+          {% endif %}
+          <div class="summary-row summary-row--total">
+            <span>Итого</span>
+            <strong class="price price--lg">{{ order.total_amount|money }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <aside class="order-side">
+        <div class="profile-panel">
+          <h2 class="details-title">{% icon 'truck' 20 %} Доставка</h2>
+          <dl class="profile-rows">
+            <div class="profile-row">
+              <dt>Получатель</dt>
+              <dd>{{ order.customer_name }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Телефон</dt>
+              <dd>{{ order.phone }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Email</dt>
+              <dd>{{ order.email|default:"не указан" }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Адрес</dt>
+              <dd>{{ order.city }}, {{ order.address }}</dd>
+            </div>
+            {% if order.comment %}
+              <div class="profile-row">
+                <dt>Комментарий</dt>
+                <dd>{{ order.comment }}</dd>
+              </div>
+            {% endif %}
+          </dl>
+          <div class="profile-actions">
+            <a class="btn btn-primary btn-block" href="{% url 'shop:order_receipt' order.order_number %}">
+              {% icon 'card' 16 %} Печатный чек
+            </a>
+            <a class="btn btn-ghost btn-block" href="{% url 'shop:profile' %}">
+              {% icon 'arrow-left' 16 %} Все заказы
+            </a>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+{% endblock %}

@@ -43,11 +43,33 @@
                     {% endfor %}
                   </ul>
 
+                  <ol class="order-timeline order-timeline--compact">
+                    {% for step in order.status_timeline %}
+                      <li class="order-timeline__step order-timeline__step--{{ step.state }}">
+                        <span class="order-timeline__dot">
+                          {% if step.state == 'done' %}{% icon 'check' 13 %}
+                          {% elif step.state == 'cancelled' %}{% icon 'x' 13 %}
+                          {% else %}{% icon 'clock' 13 %}{% endif %}
+                        </span>
+                        <span class="order-timeline__label">{{ step.label }}</span>
+                      </li>
+                    {% endfor %}
+                  </ol>
+
                   <div class="order-card__foot">
                     <span class="success-text success-text--muted">
                       {% icon 'truck' 16 %} {{ order.city }}, {{ order.address }}
                     </span>
                     <strong class="price">{{ order.total_amount|money }}</strong>
+                  </div>
+
+                  <div class="order-card__actions">
+                    <a class="btn btn-ghost" href="{% url 'shop:order_detail' order.order_number %}">
+                      {% icon 'arrow-right' 15 %} Открыть заказ
+                    </a>
+                    <a class="btn btn-ghost" href="{% url 'shop:order_receipt' order.order_number %}">
+                      {% icon 'card' 15 %} Чек
+                    </a>
                   </div>
                 </li>
               {% endfor %}

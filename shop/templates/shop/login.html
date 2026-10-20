@@ -45,6 +45,9 @@
           </button>
 
           <p class="auth-switch">
+            <a href="{% url 'shop:password_reset' %}">Забыли пароль?</a>
+          </p>
+          <p class="auth-switch">
             Нет аккаунта?
             <a href="{% url 'shop:register' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Зарегистрироваться</a>
           </p>

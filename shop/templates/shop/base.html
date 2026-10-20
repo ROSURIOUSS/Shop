@@ -49,6 +49,10 @@
             {% icon 'user-plus' %}
           </a>
         {% endif %}
+        <a class="icon-btn fav-link" href="{% url 'shop:wishlist' %}" aria-label="Избранное, товаров: {{ favorite_count }}" title="Избранное">
+          {% icon 'heart' %}
+          {% if favorite_count %}<span class="cart-count cart-count--filled">{{ favorite_count }}</span>{% endif %}
+        </a>
         <a class="icon-btn cart-btn" href="{% url 'shop:cart' %}" aria-label="Корзина, товаров: {{ cart_item_count }}">
           {% icon 'cart' %}
           <span class="cart-count{% if cart_item_count %} cart-count--filled{% endif %}">{{ cart_item_count }}</span>

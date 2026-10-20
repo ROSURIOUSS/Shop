@@ -160,6 +160,29 @@ LOGIN_URL = 'shop:login'
 LOGIN_REDIRECT_URL = 'shop:profile'
 LOGOUT_REDIRECT_URL = 'shop:home'
 
+MAIL_BACKEND = os.environ.get(
+    'DJANGO_MAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend',
+)
+MAIL_OPTIONS = {}
+if 'smtp' in MAIL_BACKEND:
+    MAIL_OPTIONS = {
+        'host': os.environ.get('DJANGO_EMAIL_HOST', 'localhost'),
+        'port': int(os.environ.get('DJANGO_EMAIL_PORT', '587')),
+        'username': os.environ.get('DJANGO_EMAIL_USER', ''),
+        'password': os.environ.get('DJANGO_EMAIL_PASSWORD', ''),
+        'use_tls': os.environ.get('DJANGO_EMAIL_TLS', '1') == '1',
+    }
+MAILERS = {
+    'default': {
+        'BACKEND': MAIL_BACKEND,
+        'OPTIONS': MAIL_OPTIONS,
+    },
+}
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DJANGO_DEFAULT_FROM_EMAIL', 'GameZone <no-reply@gamezone.example>',
+)
+PASSWORD_RESET_TIMEOUT = int(os.environ.get('DJANGO_PASSWORD_RESET_TIMEOUT', '86400'))
+
 ACTIVITY_LOG_ENABLED = os.environ.get('DJANGO_ACTIVITY_LOG', '1') == '1'
 ACTIVITY_LOG_SKIP_PREFIXES = ('/static/', '/media/', '/favicon.ico')
 

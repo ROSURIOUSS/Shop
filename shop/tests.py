@@ -4,12 +4,14 @@ import json
 import os
 import re
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from decimal import Decimal
 from io import StringIO
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import IntegrityError, transaction
@@ -19,6 +21,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from activity.models import AuthEvent, VisitLog
 from gamezone.db_url import normalize as normalize_database_url
@@ -28,6 +31,7 @@ from .cart import Cart
 from .dashboard import LOW_STOCK_THRESHOLD as DASHBOARD_LOW_STOCK_THRESHOLD
 from .models import (
     LOW_STOCK_THRESHOLD,
+    Coupon,
     Category,
     ContactMessage,
     Order,
@@ -37,6 +41,7 @@ from .models import (
     Review,
     with_rating,
 )
+from .recommendations import bought_together
 from .templatetags.shop_extras import plural_ru
 
 
@@ -1498,3 +1503,663 @@ class TemplateIntegrityTests(TestCase):
             html = response.content.decode()
             self.assertNotIn('{%', html, f'{name}: тег выведен как текст')
             self.assertNotIn('{{', html, f'{name}: переменная выведена как текст')
+
+
+class CouponModelTests(TestCase):
+    """Промокод: размер скидки, срок действия и лимит применений."""
+
+    def make_coupon(self, **kwargs):
+        defaults = {
+            'code': 'GAME10',
+            'kind': Coupon.Kind.PERCENT,
+            'value': Decimal('10'),
+        }
+        defaults.update(kwargs)
+        return Coupon.objects.create(**defaults)
+
+    def test_percent_discount(self):
+        coupon = self.make_coupon()
+        self.assertEqual(coupon.discount_for(Decimal('2000')), Decimal('200.00'))
+
+    def test_percent_discount_is_rounded(self):
+        coupon = self.make_coupon(value=Decimal('7.5'))
+        self.assertEqual(coupon.discount_for(Decimal('1999')), Decimal('149.93'))
+
+    def test_fixed_discount(self):
+        coupon = self.make_coupon(kind=Coupon.Kind.FIXED, value=Decimal('250'))
+        self.assertEqual(coupon.discount_for(Decimal('1000')), Decimal('250.00'))
+
+    def test_discount_is_never_more_than_total(self):
+        coupon = self.make_coupon(kind=Coupon.Kind.FIXED, value=Decimal('500'))
+        self.assertEqual(coupon.discount_for(Decimal('120')), Decimal('120.00'))
+
+    def test_min_total_blocks_small_orders(self):
+        coupon = self.make_coupon(min_total=Decimal('1500'))
+        self.assertEqual(coupon.discount_for(Decimal('1000')), Decimal('0.00'))
+        self.assertEqual(coupon.discount_for(Decimal('1500')), Decimal('150.00'))
+
+    def test_code_is_normalized(self):
+        coupon = Coupon.objects.create(code='  game10 ', value=Decimal('5'))
+        self.assertEqual(coupon.code, 'GAME10')
+
+    def test_disabled_coupon(self):
+        coupon = self.make_coupon(is_active=False)
+        self.assertFalse(coupon.is_available())
+        self.assertEqual(coupon.unavailable_reason(), 'Промокод отключён.')
+
+    def test_expired_coupon(self):
+        coupon = self.make_coupon(valid_until=timezone.now() - timedelta(days=1))
+        self.assertFalse(coupon.is_available())
+        self.assertEqual(coupon.unavailable_reason(), 'Срок действия промокода истёк.')
+
+    def test_not_started_coupon(self):
+        coupon = self.make_coupon(valid_from=timezone.now() + timedelta(days=1))
+        self.assertFalse(coupon.is_available())
+        self.assertEqual(coupon.unavailable_reason(), 'Срок действия промокода ещё не начался.')
+
+    def test_usage_limit(self):
+        coupon = self.make_coupon(usage_limit=2, used_count=2)
+        self.assertFalse(coupon.is_available())
+        self.assertEqual(coupon.unavailable_reason(), 'Лимит применений промокода исчерпан.')
+
+    def test_coupon_without_limits(self):
+        coupon = self.make_coupon()
+        self.assertTrue(coupon.is_available())
+        self.assertEqual(coupon.unavailable_reason(), '')
+
+
+class CartCouponTests(TestCase):
+    """Применение промокода в корзине: всё проверяется на сервере."""
+
+    def setUp(self):
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1000'), stock=20)
+        self.coupon = Coupon.objects.create(
+            code='GAME10', kind=Coupon.Kind.PERCENT, value=Decimal('10'),
+        )
+
+    def add_to_cart(self, quantity=2):
+        return self.client.post(
+            reverse('shop:cart_add', args=[self.product.pk]), {'quantity': quantity},
+        )
+
+    def apply(self, code):
+        return self.client.post(reverse('shop:coupon_apply'), {'code': code}, follow=True)
+
+    def test_apply_valid_coupon(self):
+        self.add_to_cart()
+        response = self.apply('game10')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session['coupon_code'], 'GAME10')
+        self.assertContains(response, 'coupon-code')
+        self.assertContains(response, 'GAME10')
+        self.assertContains(response, '1800'.replace('1800', '1 800'))
+
+    def test_discount_is_computed_from_cart_total(self):
+        self.add_to_cart()
+        self.apply('GAME10')
+        cart = Cart(self.client)
+        self.assertEqual(cart.get_total_price(), Decimal('2000.00'))
+        self.assertEqual(cart.get_discount(), Decimal('200.00'))
+        self.assertEqual(cart.get_payable_total(), Decimal('1800.00'))
+
+    def test_unknown_coupon(self):
+        self.add_to_cart()
+        response = self.apply('NOPE')
+        self.assertNotIn('coupon_code', self.client.session)
+        self.assertContains(response, 'не найден')
+
+    def test_expired_coupon_message(self):
+        self.coupon.valid_until = timezone.now() - timedelta(hours=1)
+        self.coupon.save()
+        self.add_to_cart()
+        response = self.apply('GAME10')
+        self.assertNotIn('coupon_code', self.client.session)
+        self.assertContains(response, 'истёк')
+
+    def test_min_total_message(self):
+        self.coupon.min_total = Decimal('5000')
+        self.coupon.save()
+        self.add_to_cart(1)
+        response = self.apply('GAME10')
+        self.assertNotIn('coupon_code', self.client.session)
+        self.assertContains(response, 'действует от')
+
+    def test_invalid_code_format(self):
+        self.add_to_cart()
+        response = self.apply('промокод!')
+        self.assertNotIn('coupon_code', self.client.session)
+        self.assertContains(response, 'латинских букв')
+
+    def test_coupon_can_be_removed(self):
+        self.add_to_cart()
+        self.apply('GAME10')
+        response = self.client.post(reverse('shop:coupon_remove'), follow=True)
+        self.assertNotIn('coupon_code', self.client.session)
+        self.assertContains(response, 'Промокод снят')
+
+    def test_clearing_cart_drops_coupon(self):
+        self.add_to_cart()
+        self.apply('GAME10')
+        self.client.post(reverse('shop:cart_clear'))
+        self.assertNotIn('coupon_code', self.client.session)
+
+    def test_stale_coupon_is_dropped(self):
+        """Если промокод отключили после применения, скидка не действует."""
+        self.add_to_cart()
+        self.apply('GAME10')
+        self.coupon.is_active = False
+        self.coupon.save()
+        cart = Cart(self.client)
+        self.assertIsNone(cart.get_coupon())
+        self.assertEqual(cart.get_discount(), Decimal('0.00'))
+
+    def test_coupon_get_request_is_not_allowed(self):
+        response = self.client.get(reverse('shop:coupon_apply'))
+        self.assertEqual(response.status_code, 405)
+
+
+class CheckoutCouponTests(TestCase):
+    """Скидка фиксируется в заказе, а лимит применений не превышается."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1000'), stock=20)
+        self.coupon = Coupon.objects.create(
+            code='GAME10', kind=Coupon.Kind.PERCENT, value=Decimal('10'),
+        )
+        self.client.force_login(self.user)
+
+    def prepare_cart(self, quantity=2, code='GAME10'):
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': quantity})
+        if code:
+            self.client.post(reverse('shop:coupon_apply'), {'code': code})
+
+    def checkout(self):
+        return self.client.post(reverse('shop:checkout'), {
+            'customer_name': 'Олена Коваль',
+            'phone': '+380671234567',
+            'email': 'buyer@example.com',
+            'city': 'Харків',
+            'address': 'вул. Сумська, 10',
+            'comment': '',
+        })
+
+    def test_discount_is_saved_in_order(self):
+        self.prepare_cart()
+        response = self.checkout()
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get()
+        self.assertEqual(order.discount_amount, Decimal('200.00'))
+        self.assertEqual(order.total_amount, Decimal('1800.00'))
+        self.assertEqual(order.coupon, self.coupon)
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.coupon.used_count, 1)
+
+    def test_cart_is_cleared_with_coupon_after_order(self):
+        self.prepare_cart()
+        self.checkout()
+        self.assertNotIn('coupon_code', self.client.session)
+
+    def test_order_without_coupon(self):
+        self.prepare_cart(code=None)
+        self.checkout()
+        order = Order.objects.get()
+        self.assertEqual(order.discount_amount, Decimal('0.00'))
+        self.assertEqual(order.total_amount, Decimal('2000.00'))
+        self.assertIsNone(order.coupon)
+
+    def test_usage_limit_is_respected(self):
+        self.coupon.usage_limit = 1
+        self.coupon.save()
+        self.prepare_cart()
+        self.checkout()
+        first = Order.objects.get()
+        self.assertEqual(first.discount_amount, Decimal('200.00'))
+
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 1})
+        self.client.post(reverse('shop:coupon_apply'), {'code': 'GAME10'})
+        self.checkout()
+        second = Order.objects.exclude(pk=first.pk).get()
+        self.assertEqual(second.discount_amount, Decimal('0.00'))
+        self.assertEqual(second.total_amount, Decimal('1000.00'))
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.coupon.used_count, 1)
+
+    def test_checkout_page_shows_discount(self):
+        self.prepare_cart()
+        response = self.client.get(reverse('shop:checkout'))
+        self.assertContains(response, 'Скидка по промокоду')
+        self.assertContains(response, '1 800')
+
+    def test_disabled_coupon_is_ignored_at_checkout(self):
+        self.prepare_cart()
+        self.coupon.is_active = False
+        self.coupon.save()
+        self.checkout()
+        order = Order.objects.get()
+        self.assertEqual(order.discount_amount, Decimal('0.00'))
+        self.assertEqual(order.total_amount, Decimal('2000.00'))
+
+
+class OrderLifecycleTests(TestCase):
+    """Жизнь заказа в кабинете: статусы, отмена и возврат товаров на склад."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.other = self.User.objects.create_user(
+            username='other', email='other@example.com', password='secret-pass-2026',
+        )
+        self.staff = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1000'), stock=10)
+        self.coupon = Coupon.objects.create(
+            code='GAME10', value=Decimal('10'), usage_limit=5, used_count=1,
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            customer_name='Олена Коваль',
+            phone='+380671234567',
+            email='buyer@example.com',
+            city='Харків',
+            address='вул. Сумська, 10',
+            status=Order.Status.NEW,
+            coupon=self.coupon,
+            discount_amount=Decimal('100.00'),
+            total_amount=Decimal('1900.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product,
+            quantity=2, price=Decimal('1000.00'),
+        )
+
+    def url(self):
+        return reverse('shop:order_detail', args=[self.order.order_number])
+
+    def test_order_detail_shows_status_and_items(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.order_number)
+        self.assertContains(response, 'Test Mouse')
+        self.assertContains(response, 'Заказ оформлен')
+        self.assertContains(response, '1 900')
+        self.assertContains(response, 'GAME10')
+
+    def test_order_detail_requires_login(self):
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('shop:login'), response.url)
+
+    def test_order_detail_is_closed_for_other_users(self):
+        self.client.force_login(self.other)
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 404)
+
+    def test_timeline_marks_current_step(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url())
+        steps = response.context['order'].status_timeline()
+        self.assertEqual([step['state'] for step in steps], ['current', 'next', 'next', 'next'])
+        self.assertEqual(steps[0]['label'], 'Заказ оформлен')
+
+    def test_timeline_after_confirmation(self):
+        self.order.status = Order.Status.CONFIRMED
+        self.order.save()
+        steps = self.order.status_timeline()
+        self.assertEqual([step['state'] for step in steps], ['done', 'current', 'next', 'next'])
+
+    def test_cancel_restores_stock_and_status(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('shop:order_cancel', args=[self.order.order_number]))
+        self.assertEqual(response.status_code, 302)
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.product.stock, 12)
+        self.assertEqual(self.coupon.used_count, 0)
+
+    def test_cancelled_order_shows_cancelled_step(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse('shop:order_cancel', args=[self.order.order_number]))
+        response = self.client.get(self.url())
+        self.assertContains(response, 'Отменён')
+        self.assertNotContains(response, 'Отменить заказ')
+        self.assertContains(response, 'товары возвращены на склад')
+
+    def test_shipped_order_cannot_be_cancelled(self):
+        self.order.status = Order.Status.SHIPPED
+        self.order.save()
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse('shop:order_cancel', args=[self.order.order_number]), follow=True,
+        )
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.SHIPPED)
+        self.assertEqual(self.product.stock, 10)
+        self.assertContains(response, 'передан в доставку')
+
+    def test_cancel_of_other_users_order_is_not_possible(self):
+        self.client.force_login(self.other)
+        response = self.client.post(reverse('shop:order_cancel', args=[self.order.order_number]))
+        self.assertEqual(response.status_code, 404)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+
+    def test_cancel_requires_post(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('shop:order_cancel', args=[self.order.order_number]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_profile_shows_timeline_and_links(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('shop:profile'))
+        self.assertContains(response, 'order-timeline')
+        self.assertContains(response, self.url())
+        self.assertContains(response, reverse('shop:order_receipt', args=[self.order.order_number]))
+
+
+class ReceiptTests(TestCase):
+    """Печатный чек доступен владельцу, персоналу и сессии после покупки."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.other = self.User.objects.create_user(
+            username='other', password='secret-pass-2026',
+        )
+        self.staff = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1500'))
+        self.coupon = Coupon.objects.create(code='SAVE200', kind=Coupon.Kind.FIXED, value=Decimal('200'))
+        self.order = Order.objects.create(
+            user=self.user, customer_name='Олена Коваль', phone='+380671234567',
+            email='buyer@example.com', city='Харків', address='вул. Сумська, 10',
+            coupon=self.coupon, discount_amount=Decimal('200.00'),
+            total_amount=Decimal('1300.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=1, price=Decimal('1500.00'),
+        )
+
+    def url(self):
+        return reverse('shop:order_receipt', args=[self.order.order_number])
+
+    def test_owner_sees_receipt(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.order_number)
+        self.assertContains(response, 'Test Mouse')
+        self.assertContains(response, 'SAVE200')
+        self.assertContains(response, '1 300')
+        self.assertContains(response, 'window.print()')
+
+    def test_other_user_gets_404(self):
+        self.client.force_login(self.other)
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 404)
+
+    def test_session_after_checkout_opens_receipt(self):
+        session = self.client.session
+        session['last_order_id'] = self.order.pk
+        session.save()
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 200)
+
+    def test_guest_without_session_gets_404(self):
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 404)
+
+    def test_staff_sees_any_receipt(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 200)
+
+    def test_unknown_order_number_is_404(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('shop:order_receipt', args=['GZ-19700101-000000-ZZZZ'])
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+class WishlistTests(TestCase):
+    """Избранное: хранение в сессии, страница и счётчик в шапке."""
+
+    def setUp(self):
+        self.category = make_category()
+        self.product = make_product(self.category, name='Test Mouse')
+        self.other = make_product(self.category, name='Test Keyboard', slug='test-keyboard')
+
+    def toggle(self, product=None):
+        product = product or self.product
+        return self.client.post(reverse('shop:favorite_toggle', args=[product.pk]), follow=True)
+
+    def test_toggle_adds_product(self):
+        response = self.toggle()
+        self.assertEqual(self.client.session['favorites'], [self.product.pk])
+        self.assertContains(response, 'добавлен в избранное')
+
+    def test_toggle_removes_product(self):
+        self.toggle()
+        response = self.toggle()
+        self.assertEqual(self.client.session['favorites'], [])
+        self.assertContains(response, 'убран из избранного')
+
+    def test_wishlist_page_lists_products(self):
+        self.toggle()
+        response = self.client.get(reverse('shop:wishlist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Test Mouse')
+        self.assertNotContains(response, 'Test Keyboard')
+
+    def test_wishlist_empty_state(self):
+        response = self.client.get(reverse('shop:wishlist'))
+        self.assertContains(response, 'В избранном пока пусто')
+
+    def test_header_shows_favorites_count(self):
+        self.toggle()
+        response = self.client.get(reverse('shop:home'))
+        self.assertEqual(response.context['favorite_count'], 1)
+        self.assertContains(response, 'Избранное, товаров: 1')
+
+    def test_card_marks_favorite(self):
+        self.toggle()
+        response = self.client.get(reverse('shop:catalog'))
+        self.assertContains(response, 'fav-btn--active')
+
+    def test_toggle_requires_post(self):
+        response = self.client.get(reverse('shop:favorite_toggle', args=[self.product.pk]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_toggle_unknown_product(self):
+        response = self.client.post(reverse('shop:favorite_toggle', args=[999999]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_toggle_returns_to_previous_page(self):
+        response = self.client.post(
+            reverse('shop:favorite_toggle', args=[self.product.pk]),
+            {'next': reverse('shop:catalog')},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('shop:catalog'))
+
+    def test_foreign_redirect_is_ignored(self):
+        response = self.client.post(
+            reverse('shop:favorite_toggle', args=[self.product.pk]),
+            {'next': 'https://evil.example/phish'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('evil.example', response.url)
+
+
+class BoughtTogetherTests(TestCase):
+    """Подборка «С этим покупают» строится только по реальным заказам."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', password='secret-pass-2026',
+        )
+        self.category = make_category()
+        self.main = make_product(self.category, name='Main Mouse', slug='main-mouse')
+        self.often = make_product(self.category, name='Often Keyboard', slug='often-keyboard')
+        self.rare = make_product(self.category, name='Rare Headset', slug='rare-headset')
+
+    def make_order(self, products, status=Order.Status.COMPLETED, user=None):
+        order = Order.objects.create(
+            user=user or self.user,
+            customer_name='Олена', phone='+380671234567', city='Харків',
+            address='вул. Сумська, 10', status=status,
+        )
+        for product in products:
+            OrderItem.objects.create(order=order, product=product, quantity=1, price=product.price)
+        return order
+
+    def test_empty_without_orders(self):
+        self.assertEqual(list(bought_together(self.main)), [])
+
+    def test_finds_product_from_same_order(self):
+        self.make_order([self.main, self.often])
+        result = list(bought_together(self.main))
+        self.assertEqual([product.name for product in result], ['Often Keyboard'])
+
+    def test_excludes_the_product_itself(self):
+        self.make_order([self.main, self.often])
+        self.make_order([self.main])
+        result = list(bought_together(self.main))
+        self.assertNotIn(self.main, result)
+
+    def test_cancelled_orders_are_ignored(self):
+        self.make_order([self.main, self.rare], status=Order.Status.CANCELLED)
+        self.assertEqual(list(bought_together(self.main)), [])
+
+    def test_more_frequent_pairs_come_first(self):
+        self.make_order([self.main, self.rare])
+        self.make_order([self.main, self.often])
+        self.make_order([self.main, self.often])
+        result = list(bought_together(self.main))
+        self.assertEqual([product.name for product in result], ['Often Keyboard', 'Rare Headset'])
+
+    def test_unavailable_products_are_hidden(self):
+        self.make_order([self.main, self.rare])
+        self.rare.is_available = False
+        self.rare.save()
+        self.assertEqual(list(bought_together(self.main)), [])
+
+    def test_block_is_rendered_on_product_page(self):
+        self.make_order([self.main, self.often])
+        response = self.client.get(self.main.get_absolute_url())
+        self.assertContains(response, 'С этим покупают')
+        self.assertContains(response, 'Often Keyboard')
+
+    def test_block_is_hidden_without_pairs(self):
+        response = self.client.get(self.main.get_absolute_url())
+        self.assertNotContains(response, 'С этим покупают')
+
+    def test_products_carry_rating_annotations(self):
+        self.make_order([self.main, self.often])
+        Review.objects.create(product=self.often, user=self.user, rating=5)
+        result = list(bought_together(self.main))
+        self.assertEqual(float(result[0].rating_avg), 5.0)
+        self.assertEqual(result[0].rating_count, 1)
+
+
+@override_settings(MAILERS={
+    'default': {
+        'BACKEND': 'django.core.mail.backends.locmem.EmailBackend',
+        'OPTIONS': {},
+    },
+})
+class PasswordResetTests(TestCase):
+    """Восстановление пароля по email: письмо, ссылка и смена пароля."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+
+    def request_reset(self, email='buyer@example.com'):
+        return self.client.post(reverse('shop:password_reset'), {'email': email})
+
+    def test_reset_form_is_available(self):
+        response = self.client.get(reverse('shop:password_reset'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Восстановление пароля')
+
+    def test_login_page_links_to_reset(self):
+        response = self.client.get(reverse('shop:login'))
+        self.assertContains(response, reverse('shop:password_reset'))
+
+    def test_email_is_sent_for_existing_account(self):
+        response = self.request_reset()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('shop:password_reset_done'))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('GameZone', mail.outbox[0].subject)
+        self.assertIn('buyer@example.com', mail.outbox[0].to)
+        self.assertIn(reverse('shop:password_reset'), mail.outbox[0].body)
+
+    def test_unknown_email_does_not_reveal_accounts(self):
+        response = self.request_reset('nobody@example.com')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_full_reset_flow_changes_password(self):
+        self.request_reset()
+        link = re.search(r'https?://\S+', mail.outbox[0].body).group(0)
+        path = link.split('testserver', 1)[1]
+
+        response = self.client.get(path)
+        self.assertEqual(response.status_code, 302)
+        set_password_url = response.url
+
+        response = self.client.get(set_password_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Новый пароль')
+
+        response = self.client.post(set_password_url, {
+            'new_password1': 'New-Secret-2026',
+            'new_password2': 'New-Secret-2026',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('shop:password_reset_complete'))
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('New-Secret-2026'))
+        self.assertTrue(self.client.login(username='buyer', password='New-Secret-2026'))
+
+    def test_invalid_token_shows_error(self):
+        url = reverse('shop:password_reset_confirm', kwargs={
+            'uidb64': 'MQ', 'token': 'invalid-token-value',
+        })
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ссылка недействительна')
+
+    def test_done_page_hides_account_existence(self):
+        response = self.client.get(reverse('shop:password_reset_done'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Если аккаунт с таким email существует')
+
+    def test_complete_page(self):
+        response = self.client.get(reverse('shop:password_reset_complete'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Пароль изменён')

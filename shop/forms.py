@@ -289,3 +289,28 @@ class ReviewForm(forms.ModelForm):
     def clean_text(self):
         """Отзыв без текста допустим, но пробелы и переносы не считаются содержимым."""
         return self.cleaned_data['text'].strip()
+
+
+class CouponForm(forms.Form):
+    """Ввод промокода. Проверка и пересчёт скидки — на сервере."""
+
+    code = forms.CharField(
+        label='Промокод',
+        max_length=32,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Например, GAMEZONE10',
+            'autocomplete': 'off',
+            'class': 'input',
+        }),
+    )
+
+    def clean_code(self):
+        """Код приводится к верхнему регистру и без пробелов по краям."""
+        code = self.cleaned_data['code'].strip().upper()
+        if not code:
+            raise forms.ValidationError('Введите промокод.')
+        if not re.fullmatch(r'[A-Z0-9_-]{2,32}', code):
+            raise forms.ValidationError(
+                'Код состоит из латинских букв, цифр, дефиса и подчёркивания.'
+            )
+        return code

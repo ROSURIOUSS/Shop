@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Avg, Count, F, Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -15,9 +16,10 @@ from django.views.decorators.http import require_POST
 from activity.models import AuthEvent
 from activity.utils import get_client_ip, log_auth_event
 
-from .cart import Cart
+from .cart import Cart, get_favorites, toggle_favorite
 from .forms import (
     ContactForm,
+    CouponForm,
     LoginForm,
     OrderForm,
     PasswordChangeForm,
@@ -28,6 +30,7 @@ from .forms import (
 )
 from .models import (
     Category,
+    Coupon,
     ContactMessage,
     Order,
     OrderItem,
@@ -36,6 +39,7 @@ from .models import (
     Review,
     with_rating,
 )
+from .recommendations import bought_together
 
 SORT_OPTIONS = {
     'popular': ('По популярности', ('-is_featured', '-created_at')),
@@ -73,6 +77,14 @@ def _has_purchased(user, product):
         product=product,
         order__user=user,
     ).exclude(order__status=Order.Status.CANCELLED).exists()
+
+
+def _money(value):
+    """Сумма для сообщений: 1 250 ₴."""
+    amount = Decimal(value).quantize(Decimal('0.01'))
+    if amount == amount.to_integral():
+        return f'{int(amount):,}'.replace(',', ' ') + ' ₴'
+    return f'{amount:,.2f}'.replace(',', ' ') + ' ₴'
 
 
 def _parse_price(value):
@@ -231,6 +243,7 @@ def _product_detail_context(request, product, review_form=None):
     return {
         'product': product,
         'related_products': related_products,
+        'bought_together': bought_together(product),
         'reviews': reviews,
         'rating_avg': None if stats['avg'] is None else round(Decimal(stats['avg']), 1),
         'rating_count': stats['count'],
@@ -283,12 +296,73 @@ def review_add(request, pk):
 
 
 def cart_detail(request):
-    """Страница корзины."""
+    """Страница корзины: сумма, промокод и скидка."""
     cart = Cart(request)
     return render(request, 'shop/cart.html', {
         'cart': cart,
         'cart_total': cart.get_total_price(),
+        'coupon': cart.get_coupon(),
+        'discount': cart.get_discount(),
+        'payable_total': cart.get_payable_total(),
+        'coupon_form': CouponForm(),
     })
+
+
+@require_POST
+def coupon_apply(request):
+    """Применить промокод к корзине. Скидка всегда считается на сервере."""
+    cart = Cart(request)
+    form = CouponForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, _first_form_error(form) or 'Введите промокод.')
+        return redirect('shop:cart')
+
+    code = form.cleaned_data['code']
+    coupon = Coupon.objects.filter(code=code).first()
+    if coupon is None:
+        messages.error(request, f'Промокод «{code}» не найден.')
+    elif not coupon.is_available():
+        messages.error(request, coupon.unavailable_reason())
+    elif cart.get_total_price() < coupon.min_total:
+        messages.error(
+            request,
+            f'Промокод действует от {_money(coupon.min_total)}. '
+            f'Сейчас в корзине {_money(cart.get_total_price())}.',
+        )
+    else:
+        cart.apply_coupon(coupon)
+        messages.success(
+            request,
+            f'Промокод {coupon.code} применён: скидка {_money(cart.get_discount())}.',
+        )
+    return redirect('shop:cart')
+
+
+@require_POST
+def coupon_remove(request):
+    """Снять промокод с корзины."""
+    Cart(request).remove_coupon()
+    messages.info(request, 'Промокод снят.')
+    return redirect('shop:cart')
+
+
+@require_POST
+def favorite_toggle(request, pk):
+    """Добавить товар в избранное или убрать его оттуда."""
+    product = get_object_or_404(Product, pk=pk)
+    if toggle_favorite(request, product):
+        messages.success(request, f'«{product.name}» добавлен в избранное.')
+    else:
+        messages.info(request, f'«{product.name}» убран из избранного.')
+    return redirect(_safe_next_url(request, product.get_absolute_url()))
+
+
+def wishlist(request):
+    """Избранные товары текущей сессии."""
+    products = with_rating(
+        Product.objects.filter(pk__in=get_favorites(request)).select_related('category')
+    )
+    return render(request, 'shop/wishlist.html', {'products': products})
 
 
 def _safe_next_url(request, default='shop:cart'):
@@ -381,6 +455,8 @@ def checkout(request):
     profile = _get_profile(request.user)
     cart_items = list(cart)
     cart_total = cart.get_total_price()
+    discount = cart.get_discount()
+    payable_total = cart_total - discount
 
     if request.method == 'POST':
         form = OrderForm(request.POST)
@@ -413,7 +489,8 @@ def checkout(request):
                         product.save()
                         total += product.price * quantity
 
-                    order.total_amount = total
+                    order.discount_amount = _apply_coupon_in_order(cart, order, total)
+                    order.total_amount = total - order.discount_amount
                     order.save()
 
                     profile.phone = order.phone
@@ -426,6 +503,9 @@ def checkout(request):
                     'form': form,
                     'cart_items': cart_items,
                     'cart_total': cart_total,
+                    'coupon': cart.get_coupon(),
+                    'discount': cart.get_discount(),
+                    'payable_total': cart.get_payable_total(),
                 })
 
             cart.clear()
@@ -449,7 +529,96 @@ def checkout(request):
         'form': form,
         'cart_items': cart_items,
         'cart_total': cart_total,
+        'coupon': cart.get_coupon(),
+        'discount': cart.get_discount(),
+        'payable_total': cart.get_payable_total(),
     })
+
+
+def _apply_coupon_in_order(cart, order, subtotal):
+    """Зафиксировать промокод в заказе и учесть применение.
+
+    Промокод перечитывается под блокировкой строки: два одновременных заказа
+    не смогут превысить лимит применений.
+    """
+    coupon = cart.get_coupon()
+    if coupon is None:
+        return Decimal('0.00')
+    locked = Coupon.objects.select_for_update().get(pk=coupon.pk)
+    discount = locked.discount_for(subtotal)
+    if discount <= 0 or not locked.is_available():
+        return Decimal('0.00')
+    order.coupon = locked
+    locked.used_count += 1
+    locked.save(update_fields=['used_count'])
+    return discount
+
+
+@login_required
+def order_detail(request, order_number):
+    """Страница заказа в кабинете: состав, скидка, статус и отмена."""
+    order = get_object_or_404(
+        Order.objects.select_related('coupon').prefetch_related('items__product'),
+        order_number=order_number,
+        user=request.user,
+    )
+    return render(request, 'shop/order_detail.html', {'order': order})
+
+
+@login_required
+@require_POST
+def order_cancel(request, order_number):
+    """Отменить свой заказ, пока он не отправлен, и вернуть товары на склад."""
+    with transaction.atomic():
+        order = get_object_or_404(
+            Order.objects.select_for_update(), order_number=order_number, user=request.user,
+        )
+        if not order.can_be_cancelled():
+            messages.error(
+                request,
+                'Заказ уже передан в доставку — отменить его можно только через поддержку.',
+            )
+            return redirect('shop:order_detail', order_number=order.order_number)
+
+        for item in order.items.select_related('product'):
+            product = Product.objects.select_for_update().get(pk=item.product_id)
+            product.stock += item.quantity
+            product.save(update_fields=['stock'])
+
+        order.status = Order.Status.CANCELLED
+        order.save(update_fields=['status', 'updated_at'])
+
+        if order.coupon_id:
+            Coupon.objects.filter(pk=order.coupon_id, used_count__gt=0).update(
+                used_count=F('used_count') - 1
+            )
+
+    messages.success(
+        request,
+        f'Заказ {order.order_number} отменён, товары вернулись на склад.',
+    )
+    return redirect('shop:order_detail', order_number=order.order_number)
+
+
+def _order_for_receipt(request, order_number):
+    """Заказ для чека: владелец, персонал или сессия сразу после покупки."""
+    order = get_object_or_404(
+        Order.objects.select_related('coupon').prefetch_related('items__product'),
+        order_number=order_number,
+    )
+    owns = request.user.is_authenticated and (
+        request.user.is_staff or order.user_id == request.user.pk
+    )
+    from_session = request.session.get('last_order_id') == order.pk
+    if not (owns or from_session):
+        raise Http404('Заказ не найден')
+    return order
+
+
+def order_receipt(request, order_number):
+    """Печатный чек заказа: печатается из браузера без сторонних библиотек."""
+    order = _order_for_receipt(request, order_number)
+    return render(request, 'shop/order_receipt.html', {'order': order})
 
 
 def order_success(request):

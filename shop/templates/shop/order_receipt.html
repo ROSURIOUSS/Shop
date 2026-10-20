@@ -1,0 +1,79 @@
+{% load shop_extras static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Чек {{ order.order_number }} — GameZone</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'shop/images/logo.svg' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'shop/css/style.css' %}">
+</head>
+<body class="receipt-page">
+  <main class="receipt">
+    <header class="receipt__head">
+      <div class="receipt__brand">
+        <img src="{% static 'shop/images/logo.svg' %}" alt="" width="32" height="32">
+        <span class="logo-text">Game<span class="logo-accent">Zone</span></span>
+      </div>
+      <div class="receipt__meta">
+        <strong>Чек по заказу</strong>
+        <span>{{ order.order_number }}</span>
+        <span>{{ order.created_at|date:"d.m.Y, H:i" }}</span>
+      </div>
+    </header>
+
+    <div class="receipt__section">
+      <h2>Покупатель</h2>
+      <p>{{ order.customer_name }}, {{ order.phone }}</p>
+      <p>{{ order.city }}, {{ order.address }}</p>
+      {% if order.email %}<p>{{ order.email }}</p>{% endif %}
+    </div>
+
+    <table class="receipt__table">
+      <thead>
+        <tr>
+          <th>Товар</th>
+          <th>Кол-во</th>
+          <th>Цена</th>
+          <th>Сумма</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in order.items.all %}
+          <tr>
+            <td>{{ item.product.name }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ item.price|money }}</td>
+            <td>{{ item.get_cost|money }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="receipt__totals">
+      <div><span>Товары</span><strong>{{ order.get_total_cost|money }}</strong></div>
+      {% if order.discount_amount %}
+        <div>
+          <span>Скидка{% if order.coupon %} ({{ order.coupon.code }}){% endif %}</span>
+          <strong>−{{ order.discount_amount|money }}</strong>
+        </div>
+      {% endif %}
+      <div class="receipt__total"><span>Итого</span><strong>{{ order.total_amount|money }}</strong></div>
+    </div>
+
+    <p class="receipt__note">
+      Статус заказа: {{ order.get_status_display }}. Документ сформирован автоматически
+      учебным проектом GameZone, оплата не проводилась.
+    </p>
+
+    <div class="receipt__actions no-print">
+      <button class="btn btn-primary" type="button" onclick="window.print()">
+        {% icon 'card' 16 %} Печать
+      </button>
+      <a class="btn btn-ghost" href="{% url 'shop:order_detail' order.order_number %}">К заказу</a>
+      <a class="btn btn-ghost" href="{% url 'shop:profile' %}">Все заказы</a>
+    </div>
+  </main>
+</body>
+</html>

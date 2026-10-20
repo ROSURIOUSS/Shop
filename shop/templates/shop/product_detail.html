@@ -63,19 +63,30 @@
           <p class="product-info__desc">{{ product.description }}</p>
 
           {% if product.in_stock %}
-            <form class="add-to-cart-form" action="{% url 'shop:cart_add' product.pk %}" method="post">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <div class="qty-picker" data-max="{{ product.stock }}">
-                <button class="qty-btn" type="button" data-qty="-1" aria-label="Уменьшить количество">{% icon 'minus' 16 %}</button>
-                <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ product.stock }}"
-                       aria-label="Количество">
-                <button class="qty-btn" type="button" data-qty="1" aria-label="Увеличить количество">{% icon 'plus' 16 %}</button>
-              </div>
-              <button class="btn btn-primary btn-lg" type="submit">
-                {% icon 'cart' 18 %} Добавить в корзину
-              </button>
-            </form>
+            <div class="product-buy">
+              <form class="add-to-cart-form" action="{% url 'shop:cart_add' product.pk %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="qty-picker" data-max="{{ product.stock }}">
+                  <button class="qty-btn" type="button" data-qty="-1" aria-label="Уменьшить количество">{% icon 'minus' 16 %}</button>
+                  <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ product.stock }}"
+                         aria-label="Количество">
+                  <button class="qty-btn" type="button" data-qty="1" aria-label="Увеличить количество">{% icon 'plus' 16 %}</button>
+                </div>
+                <button class="btn btn-primary btn-lg" type="submit">
+                  {% icon 'cart' 18 %} Добавить в корзину
+                </button>
+              </form>
+              <form action="{% url 'shop:favorite_toggle' product.pk %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="btn btn-ghost btn-lg fav-toggle{% if product.pk in favorite_ids %} fav-toggle--active{% endif %}"
+                        type="submit">
+                  {% icon 'heart' 18 %}
+                  {% if product.pk in favorite_ids %}В избранном{% else %}В избранное{% endif %}
+                </button>
+              </form>
+            </div>
           {% else %}
             <div class="out-of-stock-note">
               {% icon 'info' 18 %}
@@ -248,6 +259,20 @@
           {% endif %}
         </div>
       </section>
+
+      {% if bought_together %}
+        <div class="related">
+          <div class="section-head section-head--row">
+            <h2 class="section-title">С этим покупают</h2>
+            <span class="section-note">По данным оформленных заказов</span>
+          </div>
+          <div class="product-grid">
+            {% for product in bought_together %}
+              {% include 'shop/includes/product_card.html' with product=product %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
 
       {% if related_products %}
         <div class="related">

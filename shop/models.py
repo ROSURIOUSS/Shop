@@ -1,5 +1,5 @@
 """Модели интернет-магазина GameZone."""
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
 
 from django.conf import settings
@@ -157,6 +157,85 @@ class Profile(models.Model):
         return f'Профиль {self.user.username}'
 
 
+class Coupon(models.Model):
+    """Промокод: скидка на заказ с ограничением по сроку и числу применений."""
+
+    class Kind(models.TextChoices):
+        PERCENT = 'percent', 'Процент от суммы'
+        FIXED = 'fixed', 'Фиксированная сумма'
+
+    code = models.CharField('код', max_length=32, unique=True)
+    kind = models.CharField(
+        'тип скидки', max_length=10, choices=Kind.choices, default=Kind.PERCENT
+    )
+    value = models.DecimalField(
+        'размер скидки', max_digits=10, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    min_total = models.DecimalField(
+        'минимальная сумма заказа, ₴', max_digits=10, decimal_places=2,
+        default=0, validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    valid_from = models.DateTimeField('действует с', null=True, blank=True)
+    valid_until = models.DateTimeField('действует до', null=True, blank=True)
+    usage_limit = models.PositiveIntegerField(
+        'сколько раз можно применить', null=True, blank=True,
+        help_text='Пустое поле — без ограничений.',
+    )
+    used_count = models.PositiveIntegerField('применён раз', default=0)
+    is_active = models.BooleanField('активен', default=True)
+    created_at = models.DateTimeField('создан', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'промокод'
+        verbose_name_plural = 'Промокоды'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.code} — {self.get_kind_display()}: {self.value}'
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
+    def is_available(self, now=None):
+        """Промокод включён, срок действия идёт, лимит не исчерпан."""
+        now = now or timezone.now()
+        if not self.is_active:
+            return False
+        if self.valid_from and now < self.valid_from:
+            return False
+        if self.valid_until and now > self.valid_until:
+            return False
+        if self.usage_limit is not None and self.used_count >= self.usage_limit:
+            return False
+        return True
+
+    def unavailable_reason(self, now=None):
+        """Понятная причина, почему промокод не действует."""
+        now = now or timezone.now()
+        if not self.is_active:
+            return 'Промокод отключён.'
+        if self.valid_from and now < self.valid_from:
+            return 'Срок действия промокода ещё не начался.'
+        if self.valid_until and now > self.valid_until:
+            return 'Срок действия промокода истёк.'
+        if self.usage_limit is not None and self.used_count >= self.usage_limit:
+            return 'Лимит применений промокода исчерпан.'
+        return ''
+
+    def discount_for(self, subtotal):
+        """Скидка для суммы: не больше самой суммы и не меньше минимальной."""
+        subtotal = Decimal(subtotal)
+        if subtotal <= 0 or subtotal < self.min_total:
+            return Decimal('0.00')
+        if self.kind == self.Kind.PERCENT:
+            discount = subtotal * self.value / Decimal('100')
+        else:
+            discount = self.value
+        return min(discount, subtotal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
 class Order(models.Model):
     """Заказ покупателя."""
 
@@ -193,6 +272,17 @@ class Order(models.Model):
         choices=Status.choices,
         default=Status.NEW,
     )
+    coupon = models.ForeignKey(
+        Coupon,
+        on_delete=models.SET_NULL,
+        related_name='orders',
+        verbose_name='промокод',
+        null=True,
+        blank=True,
+    )
+    discount_amount = models.DecimalField(
+        'скидка, ₴', max_digits=10, decimal_places=2, default=0
+    )
     total_amount = models.DecimalField('общая сумма, ₴', max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField('дата создания', auto_now_add=True)
     updated_at = models.DateTimeField('дата изменения', auto_now=True)
@@ -210,6 +300,35 @@ class Order(models.Model):
             suffix = uuid4().hex[:4].upper()
             self.order_number = f'GZ-{timezone.now():%Y%m%d-%H%M%S}-{suffix}'
         super().save(*args, **kwargs)
+
+    def can_be_cancelled(self):
+        """Отменить заказ можно, пока он не отправлен на доставку."""
+        return self.status in (self.Status.NEW, self.Status.CONFIRMED)
+
+    def status_timeline(self):
+        """Шаги жизненного цикла заказа для личного кабинета."""
+        steps = (
+            (self.Status.NEW, 'Заказ оформлен'),
+            (self.Status.CONFIRMED, 'Подтверждён'),
+            (self.Status.SHIPPED, 'Отправлен'),
+            (self.Status.COMPLETED, 'Завершён'),
+        )
+        if self.status == self.Status.CANCELLED:
+            return [
+                {'code': self.Status.CANCELLED, 'label': 'Отменён', 'state': 'cancelled'}
+            ]
+        codes = [code for code, _label in steps]
+        current = codes.index(self.status) if self.status in codes else 0
+        timeline = []
+        for index, (code, label) in enumerate(steps):
+            if index < current:
+                state = 'done'
+            elif index == current:
+                state = 'current'
+            else:
+                state = 'next'
+            timeline.append({'code': code, 'label': label, 'state': state})
+        return timeline
 
     def items_summary(self):
         """Позиции заказа одной строкой — для выгрузок и списка заказов."""

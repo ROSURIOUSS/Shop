@@ -6,6 +6,15 @@
       <span class="badge badge--featured">{% icon 'star' 13 %} Топ</span>
     {% endif %}
   </a>
+  <form class="product-card__fav" action="{% url 'shop:favorite_toggle' product.pk %}" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button class="fav-btn{% if product.pk in favorite_ids %} fav-btn--active{% endif %}" type="submit"
+            aria-label="{% if product.pk in favorite_ids %}Убрать из избранного{% else %}Добавить в избранное{% endif %}"
+            title="{% if product.pk in favorite_ids %}В избранном{% else %}В избранное{% endif %}">
+      {% icon 'heart' 17 %}
+    </button>
+  </form>
   <div class="product-card__body">
     <span class="product-card__category">{{ product.category.name }}</span>
     <h3 class="product-card__title">

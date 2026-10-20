@@ -6,6 +6,7 @@ from .csv_export import CsvExportMixin, export_flat_csv
 from .models import (
     LOW_STOCK_THRESHOLD,
     Category,
+    Coupon,
     ContactMessage,
     Order,
     OrderItem,
@@ -145,6 +146,58 @@ class ProductAdmin(CsvExportMixin, admin.ModelAdmin):
         return form
 
 
+@admin.register(Coupon)
+class CouponAdmin(CsvExportMixin, admin.ModelAdmin):
+    """Промокоды: скидка, срок действия и лимит применений."""
+
+    list_display = (
+        'code', 'kind', 'value', 'min_total', 'valid_until',
+        'usage_limit', 'used_count', 'is_active',
+    )
+    list_editable = ('is_active',)
+    list_filter = ('kind', 'is_active', 'valid_until')
+    search_fields = ('code',)
+    readonly_fields = ('used_count', 'created_at')
+    ordering = ('-created_at',)
+    date_hierarchy = 'valid_until'
+    csv_basename = 'coupons'
+    csv_fields = (
+        ('code', 'Код'),
+        ('get_kind_display', 'Тип скидки'),
+        ('value', 'Размер'),
+        ('min_total', 'Минимальная сумма, ₴'),
+        ('valid_from', 'Действует с'),
+        ('valid_until', 'Действует до'),
+        ('usage_limit', 'Лимит применений'),
+        ('used_count', 'Применён раз'),
+        ('is_active', 'Активен'),
+    )
+    actions = ('export_csv', 'activate', 'deactivate')
+    fieldsets = (
+        (None, {
+            'fields': ('code', 'kind', 'value', 'min_total', 'is_active'),
+        }),
+        ('Срок и лимит', {
+            'fields': ('valid_from', 'valid_until', 'usage_limit', 'used_count'),
+            'description': 'Пустые срок и лимит означают «без ограничений».',
+        }),
+        ('Служебное', {
+            'fields': ('created_at',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    @admin.action(description='Включить промокоды')
+    def activate(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'Включено промокодов: {updated}.')
+
+    @admin.action(description='Отключить промокоды')
+    def deactivate(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'Отключено промокодов: {updated}.')
+
+
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
@@ -156,12 +209,15 @@ class OrderItemInline(admin.TabularInline):
 class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
     list_display = (
         'order_number', 'user', 'customer_name', 'phone', 'ip_address',
-        'status', 'total_amount', 'created_at',
+        'status', 'total_amount', 'discount_amount', 'coupon', 'created_at',
     )
-    list_filter = ('status', 'created_at')
+    list_filter = ('status', 'created_at', 'coupon')
     search_fields = ('order_number', 'customer_name', 'phone', 'email', 'ip_address', 'user__username')
     autocomplete_fields = ('user',)
-    readonly_fields = ('order_number', 'total_amount', 'items_summary', 'created_at', 'updated_at')
+    readonly_fields = (
+        'order_number', 'total_amount', 'discount_amount', 'items_summary',
+        'created_at', 'updated_at',
+    )
     inlines = [OrderItemInline]
     ordering = ('-created_at',)
     csv_basename = 'orders'
@@ -176,6 +232,8 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
         ('address', 'Адрес доставки'),
         ('user__username', 'Аккаунт'),
         ('ip_address', 'IP-адрес'),
+        ('discount_amount', 'Скидка, ₴'),
+        ('coupon__code', 'Промокод'),
         ('total_amount', 'Сумма, ₴'),
         ('items_summary', 'Состав заказа'),
         ('comment', 'Комментарий'),
@@ -189,7 +247,7 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
             'fields': ('user', 'customer_name', 'phone', 'email', 'city', 'address', 'ip_address'),
         }),
         ('Состав и сумма', {
-            'fields': ('items_summary', 'total_amount', 'comment'),
+            'fields': ('items_summary', 'coupon', 'discount_amount', 'total_amount', 'comment'),
         }),
     )
 

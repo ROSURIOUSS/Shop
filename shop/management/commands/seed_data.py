@@ -8,7 +8,9 @@
 from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 
-from shop.models import Category, Product
+from decimal import Decimal
+
+from shop.models import Category, Coupon, Product
 
 CATEGORIES = [
     {
@@ -47,6 +49,23 @@ CATEGORIES = [
         'name': 'Аксессуары для игровых компьютеров',
         'slug': 'accessories',
         'description': 'Веб-камеры, подставки, кабели и полезные устройства для игрового сетапа.',
+    },
+]
+
+COUPONS = [
+    {
+        'code': 'GAMEZONE10',
+        'kind': Coupon.Kind.PERCENT,
+        'value': Decimal('10'),
+        'min_total': Decimal('1000'),
+        'usage_limit': None,
+    },
+    {
+        'code': 'WELCOME200',
+        'kind': Coupon.Kind.FIXED,
+        'value': Decimal('200'),
+        'min_total': Decimal('2000'),
+        'usage_limit': 50,
     },
 ]
 
@@ -360,7 +379,22 @@ class Command(BaseCommand):
             else:
                 updated_products += 1
 
+        created_coupons = 0
+        for data in COUPONS:
+            _coupon, created = Coupon.objects.get_or_create(
+                code=data['code'],
+                defaults={
+                    'kind': data['kind'],
+                    'value': data['value'],
+                    'min_total': data['min_total'],
+                    'usage_limit': data['usage_limit'],
+                },
+            )
+            if created:
+                created_coupons += 1
+
         self.stdout.write(self.style.SUCCESS(
             f'Готово: категорий создано {created_categories}, '
-            f'товаров создано {created_products}, обновлено {updated_products}.'
+            f'товаров создано {created_products}, обновлено {updated_products}, '
+            f'промокодов создано {created_coupons}.'
         ))

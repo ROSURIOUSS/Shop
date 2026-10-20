@@ -1,0 +1,50 @@
+{% extends 'shop/base.html' %}
+{% load shop_extras %}
+
+{% block title %}Избранное — GameZone{% endblock %}
+{% block meta_description %}Избранные товары GameZone: список сохраняется в вашей сессии.{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Избранное</h1>
+      <p class="page-subtitle">
+        {% if products %}
+          {{ products|length }} {{ products|length|plural_ru:'товар,товара,товаров' }} в списке
+        {% else %}
+          Сохраняйте товары, чтобы вернуться к ним позже
+        {% endif %}
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      {% if products %}
+        <div class="product-grid">
+          {% for product in products %}
+            {% include 'shop/includes/product_card.html' with product=product %}
+          {% endfor %}
+        </div>
+        <div class="wishlist-note">
+          {% icon 'info' 16 %}
+          <span>
+            Список хранится в текущей сессии браузера. Чтобы он не потерялся,
+            не очищайте cookies сайта.
+          </span>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state__icon">{% icon 'heart' 40 %}</span>
+          <h2 class="empty-state__title">В избранном пока пусто</h2>
+          <p class="empty-state__text">
+            Нажмите на сердечко в карточке товара — он появится здесь.
+          </p>
+          <a class="btn btn-primary" href="{% url 'shop:catalog' %}">
+            {% icon 'arrow-right' 16 %} Перейти в каталог
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

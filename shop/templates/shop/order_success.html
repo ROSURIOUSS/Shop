@@ -27,6 +27,14 @@
             <span>Товаров в заказе</span>
             <strong>{{ order.items.count }} позиц.</strong>
           </div>
+          {% if order.discount_amount %}
+            <div class="summary-row summary-row--discount">
+              <span>
+                Скидка{% if order.coupon %} по промокоду <strong class="coupon-code">{{ order.coupon.code }}</strong>{% endif %}
+              </span>
+              <strong class="discount-value">−{{ order.discount_amount|money }}</strong>
+            </div>
+          {% endif %}
           <div class="summary-row">
             <span>Общая сумма</span>
             <strong class="price">{{ order.total_amount|money }}</strong>
@@ -37,9 +45,12 @@
           <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
             {% icon 'arrow-right' 18 %} Вернуться в каталог
           </a>
+          <a class="btn btn-ghost btn-lg" href="{% url 'shop:order_receipt' order.order_number %}">
+            {% icon 'card' 18 %} Печатный чек
+          </a>
           {% if user.is_authenticated %}
-            <a class="btn btn-ghost btn-lg" href="{% url 'shop:profile' %}">
-              {% icon 'history' 18 %} Мои заказы
+            <a class="btn btn-ghost btn-lg" href="{% url 'shop:order_detail' order.order_number %}">
+              {% icon 'history' 18 %} Детали заказа
             </a>
           {% endif %}
           <a class="btn btn-ghost btn-lg" href="{% url 'shop:home' %}">На главную</a>

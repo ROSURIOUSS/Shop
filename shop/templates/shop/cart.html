@@ -94,11 +94,41 @@
               <span>Промежуточная стоимость</span>
               <strong>{{ cart_total|money }}</strong>
             </div>
+
+            {% if coupon %}
+              <div class="summary-row summary-row--discount">
+                <span>
+                  Промокод <strong class="coupon-code">{{ coupon.code }}</strong>
+                  {% if coupon.kind == 'percent' %}(−{{ coupon.value|floatformat:"-2" }}%){% endif %}
+                </span>
+                <strong class="discount-value">−{{ discount|money }}</strong>
+              </div>
+              <form class="coupon-actions" action="{% url 'shop:coupon_remove' %}" method="post">
+                {% csrf_token %}
+                <button class="link-button" type="submit">Снять промокод</button>
+              </form>
+            {% else %}
+              <form class="coupon-form" action="{% url 'shop:coupon_apply' %}" method="post">
+                {% csrf_token %}
+                <label class="form-label" for="coupon-code">Промокод</label>
+                <div class="coupon-form__row">
+                  <input class="input" id="coupon-code" type="text" name="code" maxlength="32"
+                         placeholder="Например, GAMEZONE10" autocomplete="off">
+                  <button class="btn btn-ghost" type="submit">Применить</button>
+                </div>
+              </form>
+            {% endif %}
+
             <div class="summary-divider"></div>
             <div class="summary-row summary-row--total">
-              <span>Итого</span>
-              <strong class="price price--lg">{{ cart_total|money }}</strong>
+              <span>Итого{% if discount %} со скидкой{% endif %}</span>
+              <strong class="price price--lg">{{ payable_total|money }}</strong>
             </div>
+            {% if discount %}
+              <p class="summary-note summary-note--discount">
+                {% icon 'check-circle' 14 %} Вы экономите {{ discount|money }}
+              </p>
+            {% endif %}
             <a class="btn btn-primary btn-lg btn-block" href="{% url 'shop:checkout' %}">
               Оформить заказ {% icon 'arrow-right' 18 %}
             </a>

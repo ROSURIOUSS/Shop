@@ -2398,3 +2398,401 @@ a.product-info__rating:hover .product-info__rating-note {
     padding: 16px;
   }
 }
+
+/* ---------- Промокоды и скидки ---------- */
+.coupon-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+
+.coupon-form__row {
+  display: flex;
+  gap: 8px;
+}
+
+.coupon-form__row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.coupon-form__row .btn {
+  white-space: nowrap;
+}
+
+.coupon-actions {
+  margin: 4px 0 8px;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link-button:hover {
+  color: var(--purple-light);
+}
+
+.summary-row--discount span,
+.summary-row--discount strong {
+  color: var(--success);
+}
+
+.coupon-code {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px dashed rgba(34, 211, 238, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.summary-note--discount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+}
+
+/* ---------- Избранное ---------- */
+.product-card {
+  position: relative;
+}
+
+.product-card__fav {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: rgba(11, 11, 16, 0.75);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.fav-btn:hover {
+  border-color: var(--purple);
+  color: var(--purple-light);
+}
+
+.fav-btn--active {
+  border-color: var(--purple);
+  color: var(--purple-light);
+  background: rgba(139, 92, 246, 0.16);
+}
+
+.fav-btn--active svg {
+  fill: currentColor;
+}
+
+.product-buy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.fav-toggle--active {
+  border-color: var(--purple);
+  color: var(--purple-light);
+}
+
+.fav-toggle--active svg {
+  fill: currentColor;
+}
+
+.fav-link {
+  position: relative;
+}
+
+.wishlist-note,
+.section-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.wishlist-note {
+  margin-top: 24px;
+}
+
+/* ---------- Заказ: таймлайн и раскладка ---------- */
+.order-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.order-main,
+.order-side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.order-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 0;
+  margin: 18px 0;
+  list-style: none;
+}
+
+.order-timeline__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.order-timeline__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-alt);
+  color: var(--text-muted);
+  flex: none;
+}
+
+.order-timeline__step--done .order-timeline__dot {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success);
+}
+
+.order-timeline__step--done .order-timeline__label {
+  color: var(--text);
+}
+
+.order-timeline__step--current .order-timeline__dot {
+  border-color: var(--purple);
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--purple-light);
+  box-shadow: var(--glow);
+}
+
+.order-timeline__step--current .order-timeline__label {
+  color: var(--purple-light);
+  font-weight: 600;
+}
+
+.order-timeline__step--cancelled .order-timeline__dot {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--error);
+}
+
+.order-timeline--compact {
+  gap: 8px 14px;
+  margin: 14px 0 4px;
+}
+
+.order-timeline--compact .order-timeline__label {
+  font-size: 12px;
+}
+
+.order-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ---------- Печатный чек ---------- */
+.receipt-page {
+  padding: 32px 16px;
+  background: #0B0B10;
+}
+
+.receipt {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.receipt__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.receipt__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.receipt__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.receipt__section {
+  padding: 18px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.receipt__section h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.receipt__section p {
+  margin: 2px 0;
+}
+
+.receipt__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.receipt__table th,
+.receipt__table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.receipt__table th:nth-child(n+2),
+.receipt__table td:nth-child(n+2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.receipt__table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.receipt__totals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  font-size: 14px;
+}
+
+.receipt__totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.receipt__total {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 18px;
+}
+
+.receipt__note {
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.receipt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+@media (max-width: 900px) {
+  .order-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media print {
+  .no-print,
+  .site-header,
+  .site-footer,
+  .mobile-nav-backdrop {
+    display: none !important;
+  }
+
+  body,
+  .receipt-page {
+    background: #fff !important;
+    padding: 0;
+  }
+
+  .receipt {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    color: #111;
+  }
+
+  .receipt__head,
+  .receipt__table th,
+  .receipt__table td,
+  .receipt__total {
+    border-color: #d4d4d8;
+  }
+
+  .receipt__meta,
+  .receipt__section,
+  .receipt__note,
+  .receipt__table th {
+    color: #52525b;
+  }
+
+  .logo-accent {
+    color: #111;
+  }
+}
