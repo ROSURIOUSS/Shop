@@ -9,6 +9,7 @@ services:
       python manage.py collectstatic --noinput
 
     startCommand: >-
+      python manage.py db_status &&
       python manage.py migrate --noinput &&
       python manage.py seed_data --if-empty &&
       python manage.py ensure_admin &&
@@ -24,4 +25,6 @@ services:
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
+      - key: DJANGO_DATABASE_URL
         sync: false

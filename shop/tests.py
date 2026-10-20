@@ -9,13 +9,16 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.db.utils import OperationalError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from activity.models import AuthEvent, VisitLog
+from gamezone.db_url import normalize as normalize_database_url
+from gamezone.db_url import validate as validate_database_url
 
 from .cart import Cart
 from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
@@ -829,3 +832,120 @@ class BackupRestoreTests(TestCase):
                 stream.write('{"это": "не копия"}')
             with self.assertRaises(CommandError):
                 call_command('restore_data', target)
+
+class DatabaseUrlTests(TestCase):
+    """Строка подключения к базе переживает кривое копирование и понятно ругается."""
+
+    HOST = 'ep-test-1234.eu-central-1.aws.neon.tech'
+    SECRET = 'npg_SuperSecret9182'
+
+    def url(self, prefix='postgresql://', query='sslmode=require'):
+        return f'{prefix}neondb_owner:{self.SECRET}@{self.HOST}/neondb?{query}'
+
+    def test_clean_url_is_not_changed(self):
+        url = self.url()
+        self.assertEqual(validate_database_url(normalize_database_url(url)), url)
+
+    def test_html_escaped_ampersand_is_fixed(self):
+        url = self.url(query='sslmode=require&amp;channel_binding=require')
+        fixed = validate_database_url(normalize_database_url(url))
+        self.assertIn('sslmode=require&channel_binding=require', fixed)
+        self.assertNotIn('&amp;', fixed)
+
+    def test_missing_scheme_is_restored(self):
+        url = self.url(prefix='://')
+        fixed = validate_database_url(normalize_database_url(url))
+        self.assertTrue(fixed.startswith('postgresql://neondb_owner:'))
+
+    def test_variable_name_inside_value_is_stripped(self):
+        url = 'DJANGO_DATABASE_URL=' + self.url()
+        fixed = validate_database_url(normalize_database_url(url))
+        self.assertTrue(fixed.startswith('postgresql://'))
+        self.assertNotIn('DJANGO_DATABASE_URL', fixed)
+
+    def test_quotes_spaces_and_line_breaks_are_removed(self):
+        url = '  "' + self.url().replace(self.HOST, self.HOST + '\n') + '"  '
+        fixed = validate_database_url(normalize_database_url(url))
+        self.assertNotIn('"', fixed)
+        self.assertNotIn('\n', fixed)
+        self.assertNotIn(' ', fixed)
+        self.assertTrue(fixed.startswith('postgresql://'))
+
+    def test_markdown_link_is_rejected_with_clear_message(self):
+        url = f'postgresql://neondb_owner:[{self.SECRET}@{self.HOST}](mailto:x)/neondb?sslmode=require'
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            validate_database_url(normalize_database_url(url))
+        self.assertIn('скопировано вместе с разметкой', str(caught.exception))
+
+    def test_value_without_separator_is_rejected(self):
+        url = f'neondb_owner:{self.SECRET}@{self.HOST}/neondb'
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            validate_database_url(normalize_database_url(url))
+        self.assertIn('нет схемы подключения', str(caught.exception))
+
+    def test_unknown_scheme_is_rejected(self):
+        url = self.url(prefix='mongodb://')
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            validate_database_url(normalize_database_url(url))
+        self.assertIn('mongodb', str(caught.exception))
+
+    def test_error_messages_do_not_leak_password(self):
+        broken = (
+            f'postgresql://neondb_owner:[{self.SECRET}@{self.HOST}](mailto:x)/neondb',
+            f'neondb_owner:{self.SECRET}@{self.HOST}/neondb',
+            f'mongodb://neondb_owner:{self.SECRET}@{self.HOST}/neondb',
+        )
+        for url in broken:
+            with self.assertRaises(ImproperlyConfigured) as caught:
+                validate_database_url(normalize_database_url(url))
+            self.assertNotIn(self.SECRET, str(caught.exception))
+
+    def test_empty_value_is_allowed(self):
+        self.assertEqual(normalize_database_url(''), '')
+        self.assertEqual(validate_database_url(''), '')
+
+
+class DbStatusCommandTests(TestCase):
+    """Команда db_status сразу показывает, где живут данные."""
+
+    def test_warns_about_sqlite(self):
+        output = StringIO()
+        call_command('db_status', stdout=output)
+        text = output.getvalue()
+        self.assertIn('SQLite', text)
+        self.assertIn('DJANGO_DATABASE_URL', text)
+
+    @override_settings(DATABASES={
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'neondb',
+            'HOST': 'ep-test-1234.eu-central-1.aws.neon.tech',
+            'USER': 'neondb_owner',
+            'PASSWORD': 'secret',
+            'PORT': '5432',
+            'OPTIONS': {'sslmode': 'require'},
+        },
+    })
+    def test_reports_external_database(self):
+        output = StringIO()
+        call_command('db_status', stdout=output)
+        text = output.getvalue()
+        self.assertIn('postgresql', text)
+        self.assertIn('neondb', text)
+        self.assertIn('сохраняются между перезапусками', text)
+
+    def test_ping_reports_connection_error(self):
+        with mock.patch('shop.management.commands.db_status.connection') as fake_connection:
+            fake_connection.ensure_connection.side_effect = OperationalError('нет связи с базой')
+            with self.assertRaises(CommandError) as caught:
+                call_command('db_status', ping=True, stdout=StringIO())
+        message = str(caught.exception)
+        self.assertIn('Подключиться к базе не удалось', message)
+        self.assertIn('DJANGO_DATABASE_URL', message)
+
+    def test_ping_success_is_reported(self):
+        output = StringIO()
+        with mock.patch('shop.management.commands.db_status.connection') as fake_connection:
+            fake_connection.ensure_connection.return_value = None
+            call_command('db_status', ping=True, stdout=output)
+        self.assertIn('Подключение к базе работает', output.getvalue())

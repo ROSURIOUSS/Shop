@@ -21,6 +21,9 @@ DJANGO_DEBUG:
 import os
 from pathlib import Path
 
+from gamezone.db_url import normalize as normalize_database_url
+from gamezone.db_url import validate as validate_database_url
+
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -99,13 +102,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'gamezone.wsgi.application'
 ASGI_APPLICATION = 'gamezone.asgi.application'
 
-DATABASE_URL = os.environ.get('DJANGO_DATABASE_URL', '')
+DATABASE_URL = normalize_database_url(os.environ.get('DJANGO_DATABASE_URL', ''))
 
 if DATABASE_URL:
     import dj_database_url
 
     DATABASES = {
-        'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600),
+        'default': dj_database_url.config(
+            default=validate_database_url(DATABASE_URL),
+            conn_max_age=600,
+        ),
     }
 else:
     DATABASES = {

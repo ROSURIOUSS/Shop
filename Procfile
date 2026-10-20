@@ -1,1 +1,1 @@
-web: gunicorn gamezone.wsgi:application --bind 0.0.0.0:$PORT --workers 2
+web: python manage.py db_status && python manage.py migrate --noinput && python manage.py seed_data --if-empty && python manage.py ensure_admin && gunicorn gamezone.wsgi:application --bind 0.0.0.0:$PORT --workers 2

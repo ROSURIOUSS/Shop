@@ -13,7 +13,8 @@ COPY . .
 
 RUN python manage.py collectstatic --noinput
 
-CMD python manage.py migrate --noinput \
+CMD python manage.py db_status \
+    && python manage.py migrate --noinput \
     && python manage.py seed_data --if-empty \
     && python manage.py ensure_admin \
     && exec gunicorn gamezone.wsgi:application \
