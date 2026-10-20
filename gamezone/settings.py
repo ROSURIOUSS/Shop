@@ -48,7 +48,7 @@ else:
         )
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    'gamezone.admin.GameZoneAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',

@@ -6,10 +6,13 @@ from io import StringIO
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
+from activity.models import AuthEvent, VisitLog
 
 from .cart import Cart
 from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
@@ -538,3 +541,167 @@ class ProductionSecurityTests(TestCase):
     def test_foreign_host_is_rejected(self):
         response = self.client.get(reverse('shop:home'), HTTP_HOST='evil.example')
         self.assertEqual(response.status_code, 400)
+
+class DashboardTests(TestCase):
+    """Дашборд админ-панели: цифры считаются по реальным данным и с учётом прав."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.low_stock = make_product(self.category, stock=2)
+        self.enough_stock = make_product(
+            self.category, name='Test Keyboard', slug='test-keyboard',
+            price=Decimal('1999.00'), stock=50,
+        )
+
+    def make_order(self, product, quantity, status='new', ip_address='93.184.216.34'):
+        order = Order.objects.create(
+            customer_name='Іван Петренко',
+            phone='+380501112233',
+            email='ivan@example.com',
+            city='Харків',
+            address='вул. Тестова, 1',
+            status=status,
+            ip_address=ip_address,
+            total_amount=product.price * quantity,
+        )
+        OrderItem.objects.create(order=order, product=product, quantity=quantity, price=product.price)
+        return order
+
+    def dashboard(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_dashboard_is_rendered_on_admin_index(self):
+        response = self.dashboard()
+        self.assertContains(response, 'Сводка магазина')
+        self.assertContains(response, 'Продажи')
+        self.assertContains(response, 'Топ товаров по продажам')
+        self.assertContains(response, 'Склад и витрина')
+        self.assertContains(response, 'Активность')
+        self.assertContains(response, 'Последние заказы')
+
+    def test_admin_is_branded(self):
+        response = self.dashboard()
+        self.assertContains(response, 'GameZone — управление магазином')
+
+    def test_dashboard_is_not_shown_on_login_page(self):
+        response = self.client.get('/admin/login/')
+        self.assertNotContains(response, 'Сводка магазина')
+
+    def test_revenue_and_order_count(self):
+        self.make_order(self.low_stock, 2)
+        self.make_order(self.enough_stock, 1)
+        response = self.dashboard()
+        sales = response.context['dashboard']['sales']
+        today = sales[0]
+        self.assertEqual(today['label'], 'Сегодня')
+        self.assertEqual(today['revenue'], Decimal('3997.00'))
+        self.assertEqual(today['orders'], 2)
+        self.assertEqual(today['average'], Decimal('1998.50'))
+        total = sales[-1]
+        self.assertTrue(total['is_total'])
+        self.assertEqual(total['revenue'], Decimal('3997.00'))
+
+    def test_cancelled_orders_are_excluded_from_revenue(self):
+        self.make_order(self.low_stock, 1)
+        self.make_order(self.low_stock, 1, status='cancelled')
+        response = self.dashboard()
+        dashboard = response.context['dashboard']
+        self.assertEqual(dashboard['sales'][0]['revenue'], Decimal('999.00'))
+        self.assertEqual(dashboard['sales'][0]['orders'], 1)
+        cancelled = [row for row in dashboard['statuses'] if row['status'] == 'cancelled']
+        self.assertEqual(cancelled[0]['count'], 1)
+
+    def test_top_products_are_sorted_by_sold_quantity(self):
+        for _ in range(3):
+            self.make_order(self.low_stock, 2)
+        self.make_order(self.enough_stock, 1)
+        response = self.dashboard()
+        top = response.context['dashboard']['top_products']
+        self.assertEqual(top[0]['name'], 'Test Mouse')
+        self.assertEqual(top[0]['quantity'], 6)
+        self.assertEqual(top[0]['width'], 100)
+        self.assertEqual(top[1]['name'], 'Test Keyboard')
+        self.assertEqual(top[1]['quantity'], 1)
+        self.assertLess(top[1]['width'], 100)
+
+    def test_low_stock_products_are_listed(self):
+        response = self.dashboard()
+        stock = response.context['dashboard']['stock']
+        self.assertEqual(stock['threshold'], 5)
+        names = [item['name'] for item in stock['items']]
+        self.assertIn('Test Mouse', names)
+        self.assertNotIn('Test Keyboard', names)
+        self.assertEqual(stock['total'], 2)
+        self.assertEqual(stock['categories'], 1)
+        self.assertEqual(
+            stock['items'][0]['url'],
+            reverse('admin:shop_product_change', args=[self.low_stock.pk]),
+        )
+
+    def test_recent_orders_include_ip_and_link(self):
+        order = self.make_order(self.low_stock, 1)
+        response = self.dashboard()
+        recent = response.context['dashboard']['recent_orders']
+        self.assertEqual(recent[0]['number'], order.order_number)
+        self.assertEqual(recent[0]['ip_address'], '93.184.216.34')
+        self.assertEqual(recent[0]['url'], reverse('admin:shop_order_change', args=[order.pk]))
+        self.assertContains(response, '93.184.216.34')
+
+    def test_activity_counters(self):
+        VisitLog.objects.create(ip_address='93.184.216.34', path='/catalog/', method='GET', status_code=200)
+        VisitLog.objects.create(ip_address='8.8.8.8', path='/about/', method='GET', status_code=200)
+        AuthEvent.objects.create(action=AuthEvent.Action.REGISTER, success=True, username='gamer')
+        AuthEvent.objects.create(
+            action=AuthEvent.Action.LOGIN_FAILED, success=False,
+            username='hacker', ip_address='45.158.11.7',
+        )
+        response = self.dashboard()
+        activity = response.context['dashboard']['activity']
+        self.assertEqual(activity['visits']['today'], 2)
+        self.assertEqual(activity['visits']['ip_today'], 2)
+        self.assertEqual(activity['events']['registrations_today'], 1)
+        self.assertEqual(activity['events']['failed_week'], 1)
+        self.assertContains(response, 'Уникальных IP сегодня')
+
+    def test_messages_are_listed(self):
+        ContactMessage.objects.create(
+            name='Пётр', email='petr@example.com', subject='Вопрос о доставке',
+            message='Здравствуйте!',
+        )
+        response = self.dashboard()
+        messages = response.context['dashboard']['messages']
+        self.assertEqual(messages[0]['subject'], 'Вопрос о доставке')
+        self.assertContains(response, 'Вопрос о доставке')
+
+    def test_sections_are_hidden_without_permissions(self):
+        staff = self.User.objects.create_user(
+            username='storekeeper', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_product', content_type__app_label='shop'),
+        )
+        self.make_order(self.low_stock, 1)
+
+        self.client.force_login(self.User.objects.get(pk=staff.pk))
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 200)
+        dashboard = response.context['dashboard']
+        self.assertIn('stock', dashboard)
+        self.assertNotIn('sales', dashboard)
+        self.assertNotIn('top_products', dashboard)
+        self.assertNotIn('recent_orders', dashboard)
+        self.assertNotIn('activity', dashboard)
+        self.assertNotIn('messages', dashboard)
+        self.assertNotContains(response, 'Последние заказы')
+
+    def test_anonymous_cannot_see_dashboard(self):
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith('/admin/login/'))

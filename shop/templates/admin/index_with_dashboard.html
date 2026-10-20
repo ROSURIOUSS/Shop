@@ -1,0 +1,173 @@
+{% extends 'admin/index.html' %}
+{% load static shop_extras %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'shop/css/admin-dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+  {% if dashboard %}
+    <div class="gzh-dash">
+      <div class="gzh-head">
+        <div>
+          <h2 class="gzh-head__title">Сводка магазина</h2>
+          <p class="gzh-head__note">
+            Данные на {{ dashboard.generated_at|date:"d.m.Y, H:i" }} — считается по реальным заказам,
+            товарам и журналу активности.
+          </p>
+        </div>
+        {% if dashboard.new_orders %}
+          <span class="gzh-pill gzh-pill--alert">Новых заказов: {{ dashboard.new_orders }}</span>
+        {% endif %}
+      </div>
+
+      <div class="gzh-grid">
+        {% if dashboard.sales %}
+          <section class="gzh-card gzh-card--wide">
+            <h3 class="gzh-card__title">Продажи</h3>
+            <div class="gzh-metrics">
+              {% for row in dashboard.sales %}
+                <div class="gzh-metric{% if row.is_total %} gzh-metric--total{% endif %}">
+                  <span class="gzh-metric__label">{{ row.label }}</span>
+                  <strong class="gzh-metric__value">{{ row.revenue|money }}</strong>
+                  <span class="gzh-metric__note">
+                    заказов: {{ row.orders }} · средний чек {{ row.average|money }}
+                  </span>
+                </div>
+              {% endfor %}
+            </div>
+            <div class="gzh-chips">
+              {% for item in dashboard.statuses %}
+                <span class="gzh-chip gzh-chip--{{ item.status }}">{{ item.label }} <b>{{ item.count }}</b></span>
+              {% endfor %}
+            </div>
+          </section>
+        {% endif %}
+
+        {% if dashboard.can_view_orders %}
+          <section class="gzh-card">
+            <h3 class="gzh-card__title">Топ товаров по продажам</h3>
+            {% if dashboard.top_products %}
+              <ul class="gzh-bars">
+                {% for row in dashboard.top_products %}
+                  <li class="gzh-bar">
+                    <span class="gzh-bar__name" title="{{ row.name }}">{{ row.name }}</span>
+                    <span class="gzh-bar__track"><span class="gzh-bar__fill" style="width: {{ row.width }}%"></span></span>
+                    <span class="gzh-bar__value">{{ row.quantity }} шт · {{ row.revenue|money }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="gzh-empty">Продаж пока не было.</p>
+            {% endif %}
+          </section>
+        {% endif %}
+
+        {% if dashboard.can_view_products %}
+          <section class="gzh-card">
+            <h3 class="gzh-card__title">Склад и витрина</h3>
+            <div class="gzh-facts">
+              <span>Товаров: <b>{{ dashboard.stock.total }}</b></span>
+              <span>Категорий: <b>{{ dashboard.stock.categories }}</b></span>
+              <span>Нулевой остаток: <b>{{ dashboard.stock.empty }}</b></span>
+              <span>Скрыто с витрины: <b>{{ dashboard.stock.hidden }}</b></span>
+            </div>
+            <h4 class="gzh-subtitle">Заканчиваются ({{ dashboard.stock.threshold }} шт и меньше)</h4>
+            {% if dashboard.stock.items %}
+              <ul class="gzh-list">
+                {% for item in dashboard.stock.items %}
+                  <li>
+                    <a href="{{ item.url }}">{{ item.name }}</a>
+                    <b class="{% if item.stock == 0 %}gzh-bad{% endif %}">{{ item.stock }} шт</b>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="gzh-empty">Остатки в норме.</p>
+            {% endif %}
+          </section>
+        {% endif %}
+
+        {% if dashboard.activity %}
+          <section class="gzh-card">
+            <h3 class="gzh-card__title">Активность</h3>
+            {% if dashboard.activity.visits %}
+              <div class="gzh-facts">
+                <span>Посещений сегодня: <b>{{ dashboard.activity.visits.today }}</b></span>
+                <span>Посещений за 7 дней: <b>{{ dashboard.activity.visits.week }}</b></span>
+                <span>Уникальных IP сегодня: <b>{{ dashboard.activity.visits.ip_today }}</b></span>
+                <span>Вошедших сегодня: <b>{{ dashboard.activity.visits.users_today }}</b></span>
+              </div>
+            {% endif %}
+            {% if dashboard.activity.events %}
+              <h4 class="gzh-subtitle">Покупатели</h4>
+              <div class="gzh-facts">
+                <span>Регистраций сегодня: <b>{{ dashboard.activity.events.registrations_today }}</b></span>
+                <span>Регистраций за 7 дней: <b>{{ dashboard.activity.events.registrations_week }}</b></span>
+                <span>Заказов за 7 дней: <b>{{ dashboard.activity.events.orders_week }}</b></span>
+                <span>Неудачных входов за 7 дней: <b>{{ dashboard.activity.events.failed_week }}</b></span>
+              </div>
+            {% endif %}
+          </section>
+        {% endif %}
+
+        {% if dashboard.can_view_orders %}
+          <section class="gzh-card gzh-card--wide">
+            <h3 class="gzh-card__title">Последние заказы</h3>
+            {% if dashboard.recent_orders %}
+            <table class="gzh-table">
+              <thead>
+                <tr>
+                  <th>Номер</th>
+                  <th>Покупатель</th>
+                  <th>IP-адрес</th>
+                  <th>Сумма</th>
+                  <th>Статус</th>
+                  <th>Дата</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in dashboard.recent_orders %}
+                  <tr>
+                    <td><a href="{{ row.url }}">{{ row.number }}</a></td>
+                    <td>
+                      {{ row.customer }}
+                      {% if row.username %}<span class="gzh-muted">({{ row.username }})</span>{% endif %}
+                    </td>
+                    <td class="gzh-muted">{{ row.ip_address|default:"—" }}</td>
+                    <td>{{ row.total|money }}</td>
+                    <td><span class="gzh-chip gzh-chip--{{ row.status }}">{{ row.status_label }}</span></td>
+                    <td class="gzh-muted">{{ row.created_at|date:"d.m.Y, H:i" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+              <p class="gzh-empty">Заказов пока не было.</p>
+            {% endif %}
+          </section>
+        {% endif %}
+
+        {% if dashboard.can_view_messages %}
+          <section class="gzh-card">
+            <h3 class="gzh-card__title">Новые обращения</h3>
+            {% if dashboard.messages %}
+              <ul class="gzh-list">
+                {% for row in dashboard.messages %}
+                  <li>
+                    <a href="{{ row.url }}">{{ row.subject }}</a>
+                    <span class="gzh-muted">{{ row.name }} · {{ row.created_at|date:"d.m.Y" }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="gzh-empty">Обращений пока нет.</p>
+            {% endif %}
+          </section>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {{ block.super }}
+{% endblock %}
