@@ -9,6 +9,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Avg, Count, F, Q
 from django.http import Http404
+from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -39,7 +40,8 @@ from .models import (
     Review,
     with_rating,
 )
-from .orders import OrderTransitionError, cancel_order
+from .notifications import notify_new_order, send_order_confirmation
+from .orders import OrderTransitionError, cancel_order, log_order_created
 from .recommendations import bought_together
 
 SORT_OPTIONS = {
@@ -498,6 +500,8 @@ def checkout(request):
                     profile.city = order.city
                     profile.address = order.address
                     profile.save(update_fields=['phone', 'city', 'address'])
+
+                    log_order_created(order, user=request.user)
             except ValidationError as error:
                 messages.error(request, '; '.join(error.messages))
                 return render(request, 'shop/checkout.html', {
@@ -516,6 +520,11 @@ def checkout(request):
                 user=request.user, username=request.user.username,
                 detail=f'Заказ {order.order_number} на {order.total_amount}',
             )
+            admin_url = request.build_absolute_uri(
+                reverse('admin:shop_order_change', args=[order.pk])
+            )
+            notify_new_order(order, admin_url=admin_url)
+            send_order_confirmation(order)
             return redirect('shop:order_success')
     else:
         form = OrderForm(initial={
@@ -559,7 +568,9 @@ def _apply_coupon_in_order(cart, order, subtotal):
 def order_detail(request, order_number):
     """Страница заказа в кабинете: состав, скидка, статус и отмена."""
     order = get_object_or_404(
-        Order.objects.select_related('coupon').prefetch_related('items__product'),
+        Order.objects.select_related('coupon').prefetch_related(
+            'items__product', 'status_changes__changed_by',
+        ),
         order_number=order_number,
         user=request.user,
     )
@@ -572,7 +583,7 @@ def order_cancel(request, order_number):
     """Отменить свой заказ, пока он не отправлен, и вернуть товары на склад."""
     order = get_object_or_404(Order, order_number=order_number, user=request.user)
     try:
-        cancelled = cancel_order(order)
+        cancelled = cancel_order(order, user=request.user)
     except OrderTransitionError as error:
         messages.error(request, str(error))
         return redirect('shop:order_detail', order_number=order.order_number)

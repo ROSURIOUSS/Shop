@@ -2622,6 +2622,52 @@ a.product-info__rating:hover .product-info__rating-note {
   font-size: 12px;
 }
 
+.order-history {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.order-history__row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.order-history__dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--purple);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.14);
+  flex: none;
+}
+
+.order-history__body {
+  display: grid;
+  gap: 2px;
+}
+
+.order-history__title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.order-history__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.order-history__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .order-card__actions {
   display: flex;
   flex-wrap: wrap;

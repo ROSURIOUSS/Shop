@@ -36,6 +36,7 @@ from .models import (
     ContactMessage,
     Order,
     OrderItem,
+    OrderStatusChange,
     Product,
     Profile,
     Review,
@@ -2552,3 +2553,250 @@ class NewOrdersBadgeTests(TestCase):
         self.client.force_login(self.User.objects.get(pk=staff.pk))
         response = self.client.get('/admin/shop/order/')
         self.assertEqual(response.context['new_orders_count'], 1)
+
+
+class OrderHistoryTests(TestCase):
+    """История заказа: кто и когда менял статус."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.other = self.User.objects.create_user(
+            username='other', email='other@example.com', password='secret-pass-2026',
+        )
+        self.admin = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1000'), stock=20)
+        self.order = Order.objects.create(
+            user=self.user, customer_name='Олена Коваль', phone='+380671234567',
+            email='buyer@example.com', city='Харків', address='Сумська, 10',
+            total_amount=Decimal('2000.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=2, price=Decimal('1000.00'),
+        )
+
+    def place_order(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 2})
+        return self.client.post(reverse('shop:checkout'), {
+            'customer_name': 'Олена Коваль',
+            'phone': '+380671234567',
+            'email': 'buyer@example.com',
+            'city': 'Харків',
+            'address': 'Сумська, 10',
+            'comment': '',
+        })
+
+    def transition_url(self, status):
+        return reverse('admin:shop_order_transition', args=[self.order.pk, status])
+
+    def test_checkout_creates_first_history_entry(self):
+        self.place_order()
+        order = Order.objects.latest('created_at')
+        change = order.status_changes.get()
+        self.assertEqual(change.from_status, '')
+        self.assertEqual(change.to_status, Order.Status.NEW)
+        self.assertEqual(change.changed_by, self.user)
+        self.assertEqual(change.comment, 'Заказ оформлен')
+
+    def test_buyer_cancellation_records_author(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse('shop:order_cancel', args=[self.order.order_number]))
+        change = self.order.status_changes.get()
+        self.assertEqual(change.from_status, Order.Status.NEW)
+        self.assertEqual(change.to_status, Order.Status.CANCELLED)
+        self.assertEqual(change.changed_by, self.user)
+        self.assertEqual(change.author_label, 'buyer')
+        self.assertEqual(change.from_label, 'Новый')
+        self.assertEqual(change.to_label, 'Отменён')
+
+    def test_admin_transition_records_staff(self):
+        self.client.force_login(self.admin)
+        self.client.post(self.transition_url('confirmed'))
+        change = self.order.status_changes.get()
+        self.assertEqual(change.changed_by, self.admin)
+        self.assertEqual(change.to_status, Order.Status.CONFIRMED)
+        self.assertIn('сотрудник', change.author_label)
+
+    def test_impossible_transition_writes_nothing(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.transition_url('completed'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.order.status_changes.count(), 0)
+
+    def test_bulk_transition_writes_entry_for_each_order(self):
+        second = Order.objects.create(
+            customer_name='Іван', phone='+380671112233', city='Київ',
+            address='Хрещатик, 1', total_amount=Decimal('500.00'),
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse('admin:shop_order_changelist'), {
+            'action': 'mark_confirmed',
+            '_selected_action': [str(self.order.pk), str(second.pk)],
+            'index': '0',
+        })
+        self.assertEqual(self.order.status_changes.count(), 1)
+        self.assertEqual(second.status_changes.count(), 1)
+        self.assertEqual(
+            second.status_changes.get().changed_by, self.admin,
+        )
+
+    def test_history_is_shown_on_order_page(self):
+        change_status(self.order, Order.Status.CONFIRMED, user=self.admin)
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('shop:order_detail', args=[self.order.order_number])
+        )
+        self.assertContains(response, 'История заказа')
+        self.assertContains(response, 'Новый → Подтверждён')
+        self.assertNotContains(response, 'Записей пока нет')
+
+    def test_created_entry_is_labelled_clearly(self):
+        self.place_order()
+        order = Order.objects.latest('created_at')
+        response = self.client.get(
+            reverse('shop:order_detail', args=[order.order_number])
+        )
+        self.assertContains(response, 'Заказ оформлен')
+
+    def test_history_is_private(self):
+        self.client.force_login(self.other)
+        response = self.client.get(
+            reverse('shop:order_detail', args=[self.order.order_number])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_admin_change_page_shows_history(self):
+        change_status(self.order, Order.Status.CONFIRMED, user=self.admin)
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse('admin:shop_order_change', args=[self.order.pk])
+        )
+        self.assertContains(response, 'История заказа')
+        self.assertContains(response, 'admin (сотрудник)')
+
+    def test_history_is_ordered_newest_first(self):
+        change_status(self.order, Order.Status.CONFIRMED, user=self.admin)
+        change_status(self.order, Order.Status.SHIPPED, user=self.admin)
+        changes = list(self.order.status_changes.all())
+        self.assertEqual(changes[0].to_status, Order.Status.SHIPPED)
+        self.assertEqual(changes[-1].to_status, Order.Status.CONFIRMED)
+
+    def test_history_is_exported_to_csv(self):
+        change_status(self.order, Order.Status.CONFIRMED, user=self.admin)
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse('admin:shop_orderstatuschange_changelist'), {
+            'action': 'export_csv',
+            '_selected_action': [
+                str(entry.pk) for entry in OrderStatusChange.objects.all()
+            ],
+            'index': '0',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
+        content = response.content.decode('utf-8-sig')
+        self.assertIn('Номер заказа', content)
+        self.assertIn(self.order.order_number, content)
+        self.assertIn('Подтверждён', content)
+
+
+class OrderNotificationTests(TestCase):
+    """Письма при оформлении заказа: магазину и покупателю."""
+
+    ORDER_DATA = {
+        'customer_name': 'Олена Коваль',
+        'phone': '+380671234567',
+        'email': 'buyer@example.com',
+        'city': 'Харків',
+        'address': 'Сумська, 10',
+        'comment': 'Позвонить за час',
+    }
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('1000'), stock=20)
+        self.client.force_login(self.user)
+
+    def place_order(self, **overrides):
+        data = dict(self.ORDER_DATA)
+        data.update(overrides)
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 2})
+        return self.client.post(reverse('shop:checkout'), data)
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_shop_and_buyer_receive_letters(self):
+        response = self.place_order()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = sorted(message.to[0] for message in mail.outbox)
+        self.assertEqual(recipients, ['buyer@example.com', 'shop@example.com'])
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_shop_letter_contains_order_details(self):
+        self.place_order()
+        order = Order.objects.latest('created_at')
+        letter = next(m for m in mail.outbox if m.to == ['shop@example.com'])
+        self.assertIn(order.order_number, letter.subject)
+        self.assertIn(order.order_number, letter.body)
+        self.assertIn('Test Mouse', letter.body)
+        self.assertIn('2 000 ₴', letter.body)
+        self.assertIn(f'/admin/shop/order/{order.pk}/change/', letter.body)
+        self.assertIn('Позвонить за час', letter.body)
+
+    @override_settings(SHOP_NOTIFY_EMAIL='')
+    def test_shop_letter_is_skipped_without_address(self):
+        self.place_order()
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['buyer@example.com'])
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_confirmation_is_skipped_without_buyer_email(self):
+        self.place_order(email='')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['shop@example.com'])
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_letters_have_html_version(self):
+        self.place_order()
+        self.assertEqual(len(mail.outbox), 2)
+        for letter in mail.outbox:
+            self.assertTrue(letter.alternatives)
+            self.assertEqual(letter.alternatives[0][1], 'text/html')
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_confirmation_mentions_phone_and_total(self):
+        self.place_order()
+        letter = next(m for m in mail.outbox if m.to == ['buyer@example.com'])
+        self.assertIn('Заказ', letter.subject)
+        self.assertIn('+380671234567', letter.body)
+        self.assertIn('2 000 ₴', letter.body)
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_email_failure_does_not_break_checkout(self):
+        with mock.patch(
+            'shop.notifications.EmailMultiAlternatives.send',
+            side_effect=RuntimeError('SMTP недоступен'),
+        ):
+            response = self.place_order()
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.latest('created_at')
+        self.assertEqual(order.total_amount, Decimal('2000.00'))
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 18)
+
+    @override_settings(SHOP_NOTIFY_EMAIL='shop@example.com')
+    def test_letters_are_not_sent_on_cancellation(self):
+        self.place_order()
+        mail.outbox.clear()
+        order = Order.objects.latest('created_at')
+        self.client.post(reverse('shop:order_cancel', args=[order.order_number]))
+        self.assertEqual(mail.outbox, [])

@@ -1,0 +1,63 @@
+{% load shop_extras %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Заказ {{ order.order_number }} принят</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f4f7;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f1f27;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e6ee;">
+    <tr>
+      <td style="background:#101018;padding:20px 24px;color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.5px;">GameZone</td>
+    </tr>
+    <tr>
+      <td style="padding:24px;">
+        <p style="margin:0 0 12px;font-size:15px;">Здравствуйте, {{ order.customer_name }}!</p>
+        <h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;">Заказ {{ order.order_number }} принят</h1>
+        <p style="margin:0 0 20px;font-size:14px;color:#4b5563;">
+          Мы получили его {{ order.created_at|date:"d.m.Y, H:i" }}. Менеджер свяжется с вами
+          по телефону {{ order.phone }}, чтобы подтвердить заказ.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px;border-collapse:collapse;">
+          {% for item in items %}
+            <tr>
+              <td style="padding:8px 0;border-bottom:1px solid #eeeef4;">{{ item.product.name }}</td>
+              <td style="padding:8px 0;border-bottom:1px solid #eeeef4;text-align:right;white-space:nowrap;color:#6b7280;">{{ item.quantity }} × {{ item.price|money }}</td>
+              <td style="padding:8px 0 8px 12px;border-bottom:1px solid #eeeef4;text-align:right;white-space:nowrap;"><strong>{{ item.get_cost|money }}</strong></td>
+            </tr>
+          {% endfor %}
+        </table>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px;margin-top:12px;">
+          <tr>
+            <td style="padding:4px 0;color:#6b7280;">Товары</td>
+            <td style="padding:4px 0;text-align:right;">{{ order.get_total_cost|money }}</td>
+          </tr>
+          {% if order.discount_amount %}
+            <tr>
+              <td style="padding:4px 0;color:#6b7280;">Скидка{% if order.coupon %} ({{ order.coupon.code }}){% endif %}</td>
+              <td style="padding:4px 0;text-align:right;color:#16a34a;">−{{ order.discount_amount|money }}</td>
+            </tr>
+          {% endif %}
+          <tr>
+            <td style="padding:8px 0 0;font-weight:700;border-top:1px solid #eeeef4;">Итого к оплате</td>
+            <td style="padding:8px 0 0;text-align:right;font-weight:700;border-top:1px solid #eeeef4;">{{ order.total_amount|money }}</td>
+          </tr>
+        </table>
+
+        <h2 style="margin:24px 0 8px;font-size:15px;">Доставка</h2>
+        <p style="margin:0 0 20px;font-size:14px;color:#4b5563;">
+          {{ order.city }}, {{ order.address }}<br>
+          Телефон для связи: {{ order.phone }}
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 24px;background:#fafafd;border-top:1px solid #eeeef4;font-size:12px;color:#8a8a99;">
+        Статус заказа всегда виден в личном кабинете на сайте. Письмо отправлено автоматически, отвечать на него не нужно.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

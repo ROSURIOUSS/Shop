@@ -413,6 +413,64 @@ class OrderItem(models.Model):
         return self.price * self.quantity
 
 
+class OrderStatusChange(models.Model):
+    """Запись истории заказа: кто и когда сменил статус.
+
+    История пишется сервисом `shop/orders.py` — и для кнопок в админке,
+    и для отмены покупателем, поэтому в летописи всегда есть автор.
+    """
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='status_changes',
+        verbose_name='заказ',
+    )
+    from_status = models.CharField(
+        'был статус', max_length=20, choices=Order.Status.choices, blank=True,
+    )
+    to_status = models.CharField(
+        'стал статус', max_length=20, choices=Order.Status.choices,
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='order_status_changes',
+        verbose_name='кто изменил',
+        null=True,
+        blank=True,
+    )
+    comment = models.CharField('комментарий', max_length=255, blank=True)
+    created_at = models.DateTimeField('дата изменения', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'изменение статуса'
+        verbose_name_plural = 'История статусов'
+        ordering = ['-created_at', '-id']
+        indexes = [models.Index(fields=['order', '-created_at'])]
+
+    def __str__(self):
+        return f'{self.order.order_number}: {self.from_label or "создан"} → {self.to_label}'
+
+    @property
+    def from_label(self):
+        """Название прежнего статуса; пустая строка для только что созданного заказа."""
+        return Order.Status(self.from_status).label if self.from_status else ''
+
+    @property
+    def to_label(self):
+        return Order.Status(self.to_status).label
+
+    @property
+    def author_label(self):
+        """Кто изменил статус: сотрудник, покупатель или система."""
+        if self.changed_by_id:
+            user = self.changed_by
+            name = user.get_full_name() or user.username
+            return f'{name} (сотрудник)' if user.is_staff else name
+        return 'Система'
+
+
 class ContactMessage(models.Model):
     """Обращение с формы обратной связи (демонстрационный режим, без email)."""
 

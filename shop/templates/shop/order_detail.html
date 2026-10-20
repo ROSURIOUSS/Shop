@@ -87,6 +87,31 @@
             <strong class="price price--lg">{{ order.total_amount|money }}</strong>
           </div>
         </div>
+
+        <div class="profile-panel" id="history">
+          <h2 class="details-title">{% icon 'history' 20 %} История заказа</h2>
+          <ol class="order-history">
+            {% for change in order.status_changes.all %}
+              <li class="order-history__row">
+                <span class="order-history__dot"></span>
+                <div class="order-history__body">
+                  <p class="order-history__title">
+                    {% if change.from_label %}
+                      {{ change.from_label }} → {{ change.to_label }}
+                    {% else %}
+                      Заказ оформлен
+                    {% endif %}
+                  </p>
+                  <p class="order-history__meta">
+                    {{ change.created_at|date:"d.m.Y, H:i" }} · {{ change.author_label }}
+                  </p>
+                </div>
+              </li>
+            {% empty %}
+              <li class="order-history__empty">Записей пока нет.</li>
+            {% endfor %}
+          </ol>
+        </div>
       </div>
 
       <aside class="order-side">

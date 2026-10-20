@@ -1,0 +1,28 @@
+{% load shop_extras %}Новый заказ {{ order.order_number }}
+
+Сумма к оплате: {{ order.total_amount|money }}
+Статус: {{ order.get_status_display }}
+Оформлен: {{ order.created_at|date:"d.m.Y, H:i" }}
+
+Покупатель
+{{ order.customer_name }}
+Телефон: {{ order.phone }}
+Email: {{ order.email|default:"не указан" }}
+Адрес: {{ order.city }}, {{ order.address }}
+{% if order.comment %}
+Комментарий: {{ order.comment }}
+{% endif %}
+Состав заказа
+{% for item in items %}
+{{ forloop.counter }}. {{ item.product.name }} — {{ item.quantity }} шт. × {{ item.price|money }} = {{ item.get_cost|money }}
+{% endfor %}
+
+Товары: {{ order.get_total_cost|money }}
+{% if order.discount_amount %}
+Скидка{% if order.coupon %} ({{ order.coupon.code }}){% endif %}: −{{ order.discount_amount|money }}
+{% endif %}
+Итого: {{ order.total_amount|money }}
+{% if admin_url %}
+Открыть заказ в админке: {{ admin_url }}
+{% endif %}
+Письмо отправлено автоматически с сайта GameZone.

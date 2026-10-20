@@ -1,0 +1,22 @@
+{% load shop_extras %}Здравствуйте, {{ order.customer_name }}!
+
+Заказ {{ order.order_number }} принят — мы получили его {{ order.created_at|date:"d.m.Y, H:i" }}.
+
+Состав заказа
+{% for item in items %}
+{{ forloop.counter }}. {{ item.product.name }} — {{ item.quantity }} шт. × {{ item.price|money }} = {{ item.get_cost|money }}
+{% endfor %}
+
+Товары: {{ order.get_total_cost|money }}
+{% if order.discount_amount %}
+Скидка{% if order.coupon %} ({{ order.coupon.code }}){% endif %}: −{{ order.discount_amount|money }}
+{% endif %}
+Итого к оплате: {{ order.total_amount|money }}
+
+Доставка: {{ order.city }}, {{ order.address }}
+Телефон для связи: {{ order.phone }}
+
+Менеджер свяжется с вами по указанному телефону, чтобы подтвердить заказ.
+Статус заказа всегда виден в личном кабинете на сайте.
+
+Письмо отправлено автоматически, отвечать на него не нужно.

@@ -16,6 +16,7 @@ from .models import (
     ContactMessage,
     Order,
     OrderItem,
+    OrderStatusChange,
     Product,
     Profile,
     Review,
@@ -234,6 +235,38 @@ class OrderItemInline(admin.TabularInline):
     can_delete = False
 
 
+class OrderStatusChangeInline(admin.TabularInline):
+    """История заказа в карточке: только просмотр, без добавления и удаления."""
+
+    model = OrderStatusChange
+    extra = 0
+    can_delete = False
+    verbose_name = 'запись истории'
+    verbose_name_plural = 'История заказа'
+    fields = (
+        'created_at', 'from_label', 'to_label', 'author_label', 'comment',
+    )
+    readonly_fields = fields
+
+    @admin.display(description='Был статус')
+    def from_label(self, obj):
+        return obj.from_label or '—'
+
+    @admin.display(description='Стал статус')
+    def to_label(self, obj):
+        return obj.to_label
+
+    @admin.display(description='Кто изменил')
+    def author_label(self, obj):
+        return obj.author_label
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('changed_by')
+
+
 @admin.register(Order)
 class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
     """Заказы: смена статуса кнопками в карточке и массовыми действиями."""
@@ -257,7 +290,7 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
         'order_number', 'total_amount', 'discount_amount', 'items_summary',
         'created_at', 'updated_at',
     )
-    inlines = [OrderItemInline]
+    inlines = [OrderItemInline, OrderStatusChangeInline]
     ordering = ('-created_at',)
     csv_basename = 'orders'
     csv_fields = (
@@ -338,7 +371,7 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
             raise Http404('Неизвестный статус заказа')
 
         try:
-            change_status(order, status)
+            change_status(order, status, user=request.user)
         except OrderTransitionError as error:
             self.message_user(request, str(error), messages.ERROR)
         else:
@@ -357,7 +390,7 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
         skipped = 0
         for order in queryset:
             try:
-                change_status(order, status)
+                change_status(order, status, user=request.user)
             except OrderTransitionError:
                 skipped += 1
             else:
@@ -421,6 +454,56 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
                     ]
 
         return export_flat_csv('order-items', headers, rows())
+
+
+@admin.register(OrderStatusChange)
+class OrderStatusChangeAdmin(CsvExportMixin, admin.ModelAdmin):
+    """История статусов заказов: журнал только для чтения."""
+
+    list_display = (
+        'created_at', 'order', 'from_status_label', 'to_status_label', 'author_label',
+    )
+    list_filter = ('to_status', 'created_at')
+    search_fields = (
+        'order__order_number', 'order__customer_name', 'changed_by__username',
+    )
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+    list_select_related = ('order', 'changed_by')
+    readonly_fields = (
+        'order', 'from_status', 'to_status', 'changed_by', 'comment', 'created_at',
+    )
+    csv_basename = 'order-history'
+    csv_fields = (
+        ('order__order_number', 'Номер заказа'),
+        ('created_at', 'Дата'),
+        ('from_label', 'Был статус'),
+        ('to_label', 'Стал статус'),
+        ('author_label', 'Кто изменил'),
+        ('comment', 'Комментарий'),
+    )
+    actions = ('export_csv',)
+
+    @admin.display(description='Был статус')
+    def from_status_label(self, obj):
+        return obj.from_label or '—'
+
+    @admin.display(description='Стал статус')
+    def to_status_label(self, obj):
+        return obj.to_label
+
+    @admin.display(description='Кто изменил')
+    def author_label(self, obj):
+        return obj.author_label
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Review)

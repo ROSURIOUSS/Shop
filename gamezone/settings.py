@@ -183,6 +183,8 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 PASSWORD_RESET_TIMEOUT = int(os.environ.get('DJANGO_PASSWORD_RESET_TIMEOUT', '86400'))
 
+SHOP_NOTIFY_EMAIL = os.environ.get('DJANGO_SHOP_NOTIFY_EMAIL', '')
+
 ACTIVITY_LOG_ENABLED = os.environ.get('DJANGO_ACTIVITY_LOG', '1') == '1'
 ACTIVITY_LOG_SKIP_PREFIXES = ('/static/', '/media/', '/favicon.ico')
 
