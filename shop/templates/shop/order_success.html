@@ -37,6 +37,11 @@
           <a class="btn btn-primary btn-lg" href="{% url 'shop:catalog' %}">
             {% icon 'arrow-right' 18 %} Вернуться в каталог
           </a>
+          {% if user.is_authenticated %}
+            <a class="btn btn-ghost btn-lg" href="{% url 'shop:profile' %}">
+              {% icon 'history' 18 %} Мои заказы
+            </a>
+          {% endif %}
           <a class="btn btn-ghost btn-lg" href="{% url 'shop:home' %}">На главную</a>
         </div>
       </div>

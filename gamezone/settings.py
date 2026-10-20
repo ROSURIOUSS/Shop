@@ -148,6 +148,10 @@ if not DEBUG:
 
 MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 
+LOGIN_URL = 'shop:login'
+LOGIN_REDIRECT_URL = 'shop:profile'
+LOGOUT_REDIRECT_URL = 'shop:home'
+
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SSL_REDIRECT', '1') == '1'

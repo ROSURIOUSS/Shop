@@ -1,0 +1,117 @@
+{% extends 'shop/base.html' %}
+{% load shop_extras %}
+
+{% block title %}Личный кабинет — GameZone{% endblock %}
+{% block meta_description %}Личный кабинет покупателя GameZone: данные для доставки и история заказов.{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Личный кабинет</h1>
+      <p class="page-subtitle">{{ user.username }} — ваши данные и история покупок</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container profile-layout">
+      <div class="profile-main">
+        <div class="profile-panel">
+          <div class="profile-panel__head">
+            <h2 class="details-title">{% icon 'history' 20 %} История заказов</h2>
+            <span class="result-count">{{ orders|length }}</span>
+          </div>
+
+          {% if orders %}
+            <ul class="orders-list">
+              {% for order in orders %}
+                <li class="order-card">
+                  <div class="order-card__top">
+                    <div class="order-card__id">
+                      <span class="order-number">{{ order.order_number }}</span>
+                      <span class="order-card__date">{{ order.created_at|date:"d.m.Y, H:i" }}</span>
+                    </div>
+                    <span class="status-badge status-badge--{{ order.status }}">{{ order.get_status_display }}</span>
+                  </div>
+
+                  <ul class="order-card__items">
+                    {% for item in order.items.all %}
+                      <li class="order-line">
+                        <a class="order-line__name" href="{{ item.product.get_absolute_url }}">{{ item.product.name }}</a>
+                        <span class="order-line__meta">{{ item.quantity }} шт. × {{ item.price|money }}</span>
+                        <strong class="order-line__sum">{{ item.get_cost|money }}</strong>
+                      </li>
+                    {% endfor %}
+                  </ul>
+
+                  <div class="order-card__foot">
+                    <span class="success-text success-text--muted">
+                      {% icon 'truck' 16 %} {{ order.city }}, {{ order.address }}
+                    </span>
+                    <strong class="price">{{ order.total_amount|money }}</strong>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="empty-state">
+              <span class="empty-state__icon">{% icon 'package' 40 %}</span>
+              <p class="empty-state__title">Заказов пока нет</p>
+              <p class="empty-state__text">
+                Добавьте товары в корзину и оформите заказ — он появится в этом списке.
+              </p>
+              <a class="btn btn-primary" href="{% url 'shop:catalog' %}">Перейти в каталог</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <aside class="profile-side">
+        <div class="profile-panel">
+          <h2 class="details-title">{% icon 'user' 20 %} Мои данные</h2>
+          <dl class="profile-rows">
+            <div class="profile-row">
+              <dt>Логин</dt>
+              <dd>{{ user.username }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Имя и фамилия</dt>
+              <dd>{{ user.get_full_name|default:"не указано" }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Email</dt>
+              <dd>{{ user.email|default:"не указан" }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Телефон</dt>
+              <dd>{{ profile.phone|default:"не указан" }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Город</dt>
+              <dd>{{ profile.city|default:"не указан" }}</dd>
+            </div>
+            <div class="profile-row">
+              <dt>Адрес доставки</dt>
+              <dd>{{ profile.address|default:"не указан" }}</dd>
+            </div>
+          </dl>
+          <p class="form-note">Эти данные подставляются в форму оформления заказа.</p>
+
+          <div class="profile-actions">
+            <a class="btn btn-ghost btn-block" href="{% url 'shop:profile_edit' %}">
+              {% icon 'edit' 16 %} Изменить данные
+            </a>
+            <a class="btn btn-ghost btn-block" href="{% url 'shop:password_change' %}">
+              {% icon 'key' 16 %} Сменить пароль
+            </a>
+            <form method="post" action="{% url 'shop:logout' %}">
+              {% csrf_token %}
+              <button class="btn btn-ghost btn-block btn-danger-text" type="submit">
+                {% icon 'log-out' 16 %} Выйти
+              </button>
+            </form>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+{% endblock %}

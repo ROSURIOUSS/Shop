@@ -72,4 +72,26 @@ ICONS = {
         '<rect x="2" y="3" width="20" height="14" rx="2"/>'
         '<path d="M8 21h8"/><path d="M12 17v4"/>'
     ),
+    'log-in': (
+        '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>'
+        '<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>'
+    ),
+    'log-out': (
+        '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>'
+        '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'
+    ),
+    'user-plus': (
+        '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
+        '<path d="M19 8v6"/><path d="M22 11h-6"/>'
+    ),
+    'key': (
+        '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.9 12.1 8.6-8.6"/>'
+        '<path d="m17 5 2.5 2.5"/><path d="m14.8 7.2 2 2"/>'
+    ),
+    'edit': '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+    'history': (
+        '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>'
+        '<path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'
+    ),
+    'lock': '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 }

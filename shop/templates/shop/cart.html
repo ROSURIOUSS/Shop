@@ -102,6 +102,14 @@
             <a class="btn btn-primary btn-lg btn-block" href="{% url 'shop:checkout' %}">
               Оформить заказ {% icon 'arrow-right' 18 %}
             </a>
+            {% if not user.is_authenticated %}
+              <p class="summary-note summary-note--auth">
+                {% icon 'lock' 14 %}
+                Оформление заказа доступно после
+                <a href="{% url 'shop:login' %}?next={% url 'shop:checkout' %}">входа</a> или
+                <a href="{% url 'shop:register' %}?next={% url 'shop:checkout' %}">регистрации</a>.
+              </p>
+            {% endif %}
             <p class="summary-note">Оплата не подключена — учебный проект сохраняет заказ в SQLite.</p>
           </aside>
         </div>

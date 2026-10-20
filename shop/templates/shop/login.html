@@ -1,0 +1,58 @@
+{% extends 'shop/base.html' %}
+{% load shop_extras %}
+
+{% block title %}Вход — GameZone{% endblock %}
+{% block meta_description %}Вход в личный кабинет GameZone: история заказов и данные для доставки.{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Вход в аккаунт</h1>
+      <p class="page-subtitle">Оформление заказа доступно зарегистрированным покупателям</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      <div class="auth-card">
+        <form class="checkout-form" method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.GET.next }}">
+
+          {% if form.non_field_errors %}
+            <div class="alert alert--error">
+              <span class="alert-icon">{% icon 'alert' %}</span>
+              <span>{{ form.non_field_errors|first }}</span>
+            </div>
+          {% endif %}
+
+          <div class="form-grid">
+            <div class="form-field form-field--full{% if form.username.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.username.id_for_label }}">Логин <span class="req">*</span></label>
+              {{ form.username }}
+              {% if form.username.errors %}<p class="form-error">{{ form.username.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.password.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.password.id_for_label }}">Пароль <span class="req">*</span></label>
+              {{ form.password }}
+              {% if form.password.errors %}<p class="form-error">{{ form.password.errors|first }}</p>{% endif %}
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg btn-block" type="submit">
+            {% icon 'log-in' 18 %} Войти
+          </button>
+
+          <p class="auth-switch">
+            Нет аккаунта?
+            <a href="{% url 'shop:register' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Зарегистрироваться</a>
+          </p>
+          <p class="form-note">
+            Корзина собирается в сессии, поэтому товары не пропадут после входа.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+{% endblock %}

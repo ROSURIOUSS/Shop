@@ -33,6 +33,22 @@
         <button class="icon-btn" id="search-toggle" type="button" aria-label="Открыть поиск" aria-expanded="false">
           {% icon 'search' %}
         </button>
+        {% if user.is_authenticated %}
+          <a class="icon-btn" href="{% url 'shop:profile' %}" aria-label="Личный кабинет" title="Личный кабинет">
+            {% icon 'user' %}
+          </a>
+          <form class="logout-form" method="post" action="{% url 'shop:logout' %}">
+            {% csrf_token %}
+            <button class="icon-btn" type="submit" aria-label="Выйти" title="Выйти">{% icon 'log-out' %}</button>
+          </form>
+        {% else %}
+          <a class="icon-btn" href="{% url 'shop:login' %}" aria-label="Войти" title="Войти">
+            {% icon 'log-in' %}
+          </a>
+          <a class="icon-btn" href="{% url 'shop:register' %}" aria-label="Регистрация" title="Регистрация">
+            {% icon 'user-plus' %}
+          </a>
+        {% endif %}
         <a class="icon-btn cart-btn" href="{% url 'shop:cart' %}" aria-label="Корзина, товаров: {{ cart_item_count }}">
           {% icon 'cart' %}
           <span class="cart-count{% if cart_item_count %} cart-count--filled{% endif %}">{{ cart_item_count }}</span>
@@ -98,6 +114,21 @@
           <li><a href="{% url 'shop:about' %}">О магазине</a></li>
           <li><a href="{% url 'shop:contacts' %}">Контакты</a></li>
           <li><a href="{% url 'shop:about' %}#delivery">Доставка и оплата</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-title">Кабинет</h4>
+        <ul class="footer-links">
+          {% if user.is_authenticated %}
+            <li><a href="{% url 'shop:profile' %}">Личный кабинет</a></li>
+            <li><a href="{% url 'shop:profile_edit' %}">Мои данные</a></li>
+            <li><a href="{% url 'shop:password_change' %}">Сменить пароль</a></li>
+          {% else %}
+            <li><a href="{% url 'shop:login' %}">Вход</a></li>
+            <li><a href="{% url 'shop:register' %}">Регистрация</a></li>
+          {% endif %}
+          <li><a href="{% url 'shop:cart' %}">Корзина</a></li>
         </ul>
       </div>
 

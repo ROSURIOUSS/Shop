@@ -1,0 +1,73 @@
+{% extends 'shop/base.html' %}
+{% load shop_extras %}
+
+{% block title %}Регистрация — GameZone{% endblock %}
+{% block meta_description %}Создайте аккаунт GameZone, чтобы оформлять заказы и видеть историю покупок в личном кабинете.{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div class="container">
+      <h1 class="page-title">Регистрация</h1>
+      <p class="page-subtitle">Аккаунт нужен, чтобы оформлять заказы и следить за их статусом</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      <div class="auth-card">
+        <form class="checkout-form" method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.GET.next }}">
+
+          {% if form.non_field_errors %}
+            <div class="alert alert--error">
+              <span class="alert-icon">{% icon 'alert' %}</span>
+              <span>{{ form.non_field_errors|first }}</span>
+            </div>
+          {% endif %}
+
+          <div class="form-grid">
+            <div class="form-field{% if form.username.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.username.id_for_label }}">Логин <span class="req">*</span></label>
+              {{ form.username }}
+              {% if form.username.help_text %}<p class="form-help">{{ form.username.help_text }}</p>{% endif %}
+              {% if form.username.errors %}<p class="form-error">{{ form.username.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field{% if form.email.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.email.id_for_label }}">Email <span class="req">*</span></label>
+              {{ form.email }}
+              {% if form.email.help_text %}<p class="form-help">{{ form.email.help_text }}</p>{% endif %}
+              {% if form.email.errors %}<p class="form-error">{{ form.email.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.password1.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.password1.id_for_label }}">Пароль <span class="req">*</span></label>
+              {{ form.password1 }}
+              {% if form.password1.help_text %}<p class="form-help">{{ form.password1.help_text }}</p>{% endif %}
+              {% if form.password1.errors %}<p class="form-error">{{ form.password1.errors|first }}</p>{% endif %}
+            </div>
+
+            <div class="form-field form-field--full{% if form.password2.errors %} form-field--error{% endif %}">
+              <label class="form-label" for="{{ form.password2.id_for_label }}">Пароль ещё раз <span class="req">*</span></label>
+              {{ form.password2 }}
+              {% if form.password2.errors %}<p class="form-error">{{ form.password2.errors|first }}</p>{% endif %}
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg btn-block" type="submit">
+            {% icon 'user-plus' 18 %} Создать аккаунт
+          </button>
+
+          <p class="auth-switch">
+            Уже зарегистрированы?
+            <a href="{% url 'shop:login' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Войти</a>
+          </p>
+          <p class="form-note">
+            Проект учебный: письма не отправляются, данные хранятся только в базе магазина.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+{% endblock %}

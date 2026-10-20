@@ -2,6 +2,8 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
+from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -11,8 +13,16 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .cart import Cart
-from .forms import ContactForm, OrderForm
-from .models import Category, ContactMessage, Order, OrderItem, Product
+from .forms import (
+    ContactForm,
+    LoginForm,
+    OrderForm,
+    PasswordChangeForm,
+    ProfileForm,
+    RegisterForm,
+    UserForm,
+)
+from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
 
 SORT_OPTIONS = {
     'popular': ('По популярности', ('-is_featured', '-created_at')),
@@ -23,6 +33,14 @@ SORT_OPTIONS = {
 }
 DEFAULT_SORT = 'popular'
 PRODUCTS_PER_PAGE = 12
+
+
+def _get_profile(user):
+    """Профиль покупателя: создаётся при регистрации, но мог отсутствовать
+    у аккаунтов, созданных через createsuperuser или до появления профилей.
+    """
+    profile, _created = Profile.objects.get_or_create(user=user)
+    return profile
 
 
 def _parse_price(value):
@@ -257,13 +275,19 @@ def cart_clear(request):
     return redirect('shop:cart')
 
 
+@login_required
 def checkout(request):
-    """Оформление заказа: форма + сводка + атомарное создание заказа."""
+    """Оформление заказа: форма + сводка + атомарное создание заказа.
+
+    Заказ доступен только зарегистрированным покупателям и привязывается
+    к их аккаунту, поэтому история покупок видна в личном кабинете.
+    """
     cart = Cart(request)
     if cart.is_empty():
         messages.info(request, 'Корзина пуста. Добавьте товары перед оформлением заказа.')
         return redirect('shop:cart')
 
+    profile = _get_profile(request.user)
     cart_items = list(cart)
     cart_total = cart.get_total_price()
 
@@ -273,6 +297,7 @@ def checkout(request):
             try:
                 with transaction.atomic():
                     order = form.save(commit=False)
+                    order.user = request.user
                     order.save()
 
                     total = Decimal('0.00')
@@ -298,6 +323,11 @@ def checkout(request):
 
                     order.total_amount = total
                     order.save()
+
+                    profile.phone = order.phone
+                    profile.city = order.city
+                    profile.address = order.address
+                    profile.save(update_fields=['phone', 'city', 'address'])
             except ValidationError as error:
                 messages.error(request, '; '.join(error.messages))
                 return render(request, 'shop/checkout.html', {
@@ -310,7 +340,13 @@ def checkout(request):
             request.session['last_order_id'] = order.pk
             return redirect('shop:order_success')
     else:
-        form = OrderForm()
+        form = OrderForm(initial={
+            'customer_name': request.user.get_full_name() or request.user.username,
+            'phone': profile.phone,
+            'email': request.user.email,
+            'city': profile.city,
+            'address': profile.address,
+        })
 
     return render(request, 'shop/checkout.html', {
         'form': form,
@@ -330,6 +366,101 @@ def order_success(request):
         return redirect('shop:home')
     order = get_object_or_404(Order, pk=order_id)
     return render(request, 'shop/order_success.html', {'order': order})
+
+
+def register(request):
+    """Регистрация покупателя с автоматическим входом."""
+    if request.user.is_authenticated:
+        return redirect('shop:profile')
+
+    if request.method == 'POST':
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            Profile.objects.create(user=user)
+            login(request, user)
+            messages.success(request, f'Аккаунт «{user.username}» создан. Можно оформлять заказы.')
+            return redirect(_safe_next_url(request, 'shop:profile'))
+    else:
+        form = RegisterForm()
+    return render(request, 'shop/register.html', {'form': form})
+
+
+def user_login(request):
+    """Вход в аккаунт."""
+    if request.user.is_authenticated:
+        return redirect('shop:profile')
+
+    if request.method == 'POST':
+        form = LoginForm(request, data=request.POST)
+        if form.is_valid():
+            login(request, form.get_user())
+            messages.success(request, f'С возвращением, {request.user.username}!')
+            return redirect(_safe_next_url(request, 'shop:profile'))
+    else:
+        form = LoginForm(request)
+    return render(request, 'shop/login.html', {'form': form})
+
+
+@require_POST
+def user_logout(request):
+    """Выход из аккаунта (POST — действие защищено CSRF)."""
+    logout(request)
+    messages.info(request, 'Вы вышли из аккаунта.')
+    return redirect('shop:home')
+
+
+@login_required
+def profile(request):
+    """Личный кабинет: данные покупателя и история заказов."""
+    orders = (
+        request.user.orders
+        .prefetch_related('items__product')
+        .order_by('-created_at')
+    )
+    return render(request, 'shop/profile.html', {
+        'profile': _get_profile(request.user),
+        'orders': orders,
+    })
+
+
+@login_required
+def profile_edit(request):
+    """Изменение имени, email, телефона и адреса доставки."""
+    profile = _get_profile(request.user)
+
+    if request.method == 'POST':
+        user_form = UserForm(request.POST, instance=request.user)
+        profile_form = ProfileForm(request.POST, instance=profile)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
+            messages.success(request, 'Данные сохранены.')
+            return redirect('shop:profile')
+    else:
+        user_form = UserForm(instance=request.user)
+        profile_form = ProfileForm(instance=profile)
+
+    return render(request, 'shop/profile_edit.html', {
+        'user_form': user_form,
+        'profile_form': profile_form,
+        'profile': profile,
+    })
+
+
+@login_required
+def password_change(request):
+    """Смена пароля. Сессия не сбрасывается, чтобы не пришлось входить снова."""
+    if request.method == 'POST':
+        form = PasswordChangeForm(user=request.user, data=request.POST)
+        if form.is_valid():
+            form.save()
+            update_session_auth_hash(request, form.user)
+            messages.success(request, 'Пароль изменён.')
+            return redirect('shop:profile')
+    else:
+        form = PasswordChangeForm(user=request.user)
+    return render(request, 'shop/password_change.html', {'form': form})
 
 
 def about(request):

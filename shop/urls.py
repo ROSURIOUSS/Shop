@@ -18,6 +18,12 @@ urlpatterns = [
     path('cart/clear/', views.cart_clear, name='cart_clear'),
     path('checkout/', views.checkout, name='checkout'),
     path('order/success/', views.order_success, name='order_success'),
+    path('accounts/register/', views.register, name='register'),
+    path('accounts/login/', views.user_login, name='login'),
+    path('accounts/logout/', views.user_logout, name='logout'),
+    path('accounts/profile/', views.profile, name='profile'),
+    path('accounts/profile/edit/', views.profile_edit, name='profile_edit'),
+    path('accounts/password/', views.password_change, name='password_change'),
     path('about/', views.about, name='about'),
     path('contacts/', views.contacts, name='contacts'),
 ]

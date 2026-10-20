@@ -1,7 +1,14 @@
 """Формы интернет-магазина GameZone."""
-from django import forms
+import re
 
-from .models import ContactMessage, Order
+from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import PasswordChangeForm as DjangoPasswordChangeForm
+
+from .models import ContactMessage, Order, Profile
+
+User = get_user_model()
 
 
 class OrderForm(forms.ModelForm):
@@ -72,3 +79,159 @@ class ContactForm(forms.ModelForm):
             'subject': 'Тема',
             'message': 'Сообщение',
         }
+
+class RegisterForm(UserCreationForm):
+    """Регистрация покупателя."""
+
+    email = forms.EmailField(
+        label='Email',
+        required=True,
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'you@example.com',
+            'autocomplete': 'email',
+        }),
+        help_text='Укажите действующий email: он попадёт в ваши заказы для связи.',
+    )
+    password1 = forms.CharField(
+        label='Пароль',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Придумайте пароль',
+            'autocomplete': 'new-password',
+        }),
+        help_text='Минимум 8 символов, не только цифры и не совпадающий с логином.',
+    )
+    password2 = forms.CharField(
+        label='Пароль ещё раз',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Повторите пароль',
+            'autocomplete': 'new-password',
+        }),
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email']
+        widgets = {
+            'username': forms.TextInput(attrs={
+                'placeholder': 'например, gamer_pro',
+                'autocomplete': 'username',
+            }),
+        }
+
+    def clean_email(self):
+        """Email должен быть уникальным — по нему магазин связывается с покупателем."""
+        email = self.cleaned_data.get('email', '').strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError('Пользователь с таким email уже зарегистрирован.')
+        return email
+
+
+class LoginForm(AuthenticationForm):
+    """Вход в аккаунт."""
+
+    username = forms.CharField(
+        label='Логин',
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Ваш логин',
+            'autocomplete': 'username',
+            'autofocus': True,
+        }),
+    )
+    password = forms.CharField(
+        label='Пароль',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Ваш пароль',
+            'autocomplete': 'current-password',
+        }),
+    )
+
+
+class UserForm(forms.ModelForm):
+    """Изменение имени, фамилии и email покупателя."""
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email']
+        labels = {
+            'first_name': 'Имя',
+            'last_name': 'Фамилия',
+            'email': 'Email',
+        }
+        widgets = {
+            'first_name': forms.TextInput(attrs={'placeholder': 'Иван', 'autocomplete': 'given-name'}),
+            'last_name': forms.TextInput(attrs={'placeholder': 'Петренко', 'autocomplete': 'family-name'}),
+            'email': forms.EmailInput(attrs={'placeholder': 'you@example.com', 'autocomplete': 'email'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['email'].required = True
+
+    def clean_email(self):
+        """Email остаётся уникальным среди всех покупателей."""
+        email = self.cleaned_data.get('email', '').strip()
+        taken = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk).exists()
+        if taken:
+            raise forms.ValidationError('Этот email уже занят другим покупателем.')
+        return email
+
+
+class ProfileForm(forms.ModelForm):
+    """Контакты и адрес доставки из профиля покупателя."""
+
+    class Meta:
+        model = Profile
+        fields = ['phone', 'city', 'address']
+        labels = {
+            'phone': 'Телефон',
+            'city': 'Город',
+            'address': 'Адрес доставки',
+        }
+        widgets = {
+            'phone': forms.TextInput(attrs={'placeholder': '+380 __ ___ __ __', 'autocomplete': 'tel'}),
+            'city': forms.TextInput(attrs={'placeholder': 'Харьков', 'autocomplete': 'address-level2'}),
+            'address': forms.TextInput(attrs={
+                'placeholder': 'Отделение или улица, дом, квартира',
+                'autocomplete': 'street-address',
+            }),
+        }
+
+    def clean_phone(self):
+        """Телефон необязателен, но если указан — в нём должны быть цифры."""
+        phone = self.cleaned_data.get('phone', '').strip()
+        if phone and len(re.sub(r'\D', '', phone)) < 9:
+            raise forms.ValidationError('Укажите телефон полностью, например +380501112233.')
+        return phone
+
+
+class PasswordChangeForm(DjangoPasswordChangeForm):
+    """Смена пароля с русскими подписями полей."""
+
+    old_password = forms.CharField(
+        label='Текущий пароль',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Введите текущий пароль',
+            'autocomplete': 'current-password',
+        }),
+    )
+    new_password1 = forms.CharField(
+        label='Новый пароль',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Придумайте новый пароль',
+            'autocomplete': 'new-password',
+        }),
+        help_text='Минимум 8 символов, не только цифры и не совпадающий с логином.',
+    )
+    new_password2 = forms.CharField(
+        label='Новый пароль ещё раз',
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Повторите новый пароль',
+            'autocomplete': 'new-password',
+        }),
+    )

@@ -2,6 +2,7 @@
 from decimal import Decimal
 from uuid import uuid4
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -99,6 +100,27 @@ class Product(models.Model):
         return list(self.specifications.items())
 
 
+class Profile(models.Model):
+    """Профиль покупателя: контактные данные и адрес доставки по умолчанию."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        verbose_name='пользователь',
+    )
+    phone = models.CharField('телефон', max_length=30, blank=True)
+    city = models.CharField('город', max_length=100, blank=True)
+    address = models.CharField('адрес доставки', max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = 'профиль'
+        verbose_name_plural = 'Профили'
+
+    def __str__(self):
+        return f'Профиль {self.user.username}'
+
+
 class Order(models.Model):
     """Заказ покупателя."""
 
@@ -109,6 +131,14 @@ class Order(models.Model):
         COMPLETED = 'completed', 'Завершён'
         CANCELLED = 'cancelled', 'Отменён'
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='orders',
+        verbose_name='покупатель',
+        null=True,
+        blank=True,
+    )
     order_number = models.CharField('номер заказа', max_length=32, unique=True, blank=True)
     customer_name = models.CharField('имя и фамилия', max_length=150)
     phone = models.CharField('телефон', max_length=30)

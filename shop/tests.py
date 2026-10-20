@@ -1,4 +1,4 @@
-"""Базовые тесты моделей, корзины и оформления заказа."""
+"""Тесты моделей, корзины, оформления заказа и аккаунтов покупателей."""
 import os
 import re
 from decimal import Decimal
@@ -12,7 +12,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .cart import Cart
-from .models import Category, ContactMessage, Order, OrderItem, Product
+from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
 
 
 def make_category(**kwargs):
@@ -121,6 +121,9 @@ class ViewTests(TestCase):
             self.category, name='Test Keyboard', slug='test-keyboard',
             price=Decimal('1999.00'),
         )
+        self.buyer = get_user_model().objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
 
     def test_home_page(self):
         response = self.client.get(reverse('shop:home'))
@@ -178,6 +181,7 @@ class ViewTests(TestCase):
         self.assertNotIn(str(self.product.pk), self.client.session.get('cart', {}))
 
     def test_checkout_creates_order_and_reduces_stock(self):
+        self.client.force_login(self.buyer)
         self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 2})
         response = self.client.post(reverse('shop:checkout'), {
             'customer_name': 'Иван Петренко',
@@ -196,6 +200,7 @@ class ViewTests(TestCase):
         self.assertFalse(self.client.session.get('cart'))
 
     def test_checkout_rejects_insufficient_stock(self):
+        self.client.force_login(self.buyer)
         self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 5})
         self.product.stock = 1
         self.product.save()
@@ -209,8 +214,14 @@ class ViewTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
 
     def test_checkout_empty_cart_redirects(self):
+        self.client.force_login(self.buyer)
         response = self.client.get(reverse('shop:checkout'))
         self.assertRedirects(response, reverse('shop:cart'))
+
+    def test_guest_checkout_is_redirected_to_login(self):
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 1})
+        response = self.client.get(reverse('shop:checkout'))
+        self.assertRedirects(response, reverse('shop:login') + '?next=/checkout/')
 
     def test_order_success_requires_session(self):
         response = self.client.get(reverse('shop:order_success'))
@@ -238,6 +249,167 @@ class ViewTests(TestCase):
         self.assertEqual(len(response.context['products']), 12)
         response_page_2 = self.client.get(reverse('shop:catalog'), {'page': 2})
         self.assertEqual(len(response_page_2.context['products']), 5)
+
+
+class AccountTests(TestCase):
+    def setUp(self):
+        self.category = make_category()
+        self.product = make_product(self.category, stock=5)
+        self.User = get_user_model()
+
+    def register(self, **overrides):
+        data = {
+            'username': 'gamer',
+            'email': 'gamer@example.com',
+            'password1': 'strong-pass-2026',
+            'password2': 'strong-pass-2026',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('shop:register'), data)
+
+    def test_register_creates_user_profile_and_logs_in(self):
+        response = self.register()
+        self.assertRedirects(response, reverse('shop:profile'))
+        user = self.User.objects.get(username='gamer')
+        self.assertEqual(user.email, 'gamer@example.com')
+        self.assertTrue(user.check_password('strong-pass-2026'))
+        self.assertTrue(Profile.objects.filter(user=user).exists())
+        self.assertEqual(self.client.session['_auth_user_id'], str(user.pk))
+
+    def test_register_rejects_duplicate_email(self):
+        self.User.objects.create_user(username='first', email='gamer@example.com', password='pass-1234567')
+        response = self.register(username='second')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.User.objects.filter(username='second').exists())
+
+    def test_register_rejects_weak_password(self):
+        response = self.register(password1='123', password2='123')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.User.objects.filter(username='gamer').exists())
+
+    def test_login_and_logout(self):
+        self.User.objects.create_user(username='gamer', email='g@example.com', password='strong-pass-2026')
+        response = self.client.post(reverse('shop:login'), {'username': 'gamer', 'password': 'strong-pass-2026'})
+        self.assertRedirects(response, reverse('shop:profile'))
+
+        logout_response = self.client.post(reverse('shop:logout'))
+        self.assertRedirects(logout_response, reverse('shop:home'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_login_rejects_wrong_password(self):
+        self.User.objects.create_user(username='gamer', password='strong-pass-2026')
+        response = self.client.post(reverse('shop:login'), {'username': 'gamer', 'password': 'wrong'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_logout_requires_post(self):
+        response = self.client.get(reverse('shop:logout'))
+        self.assertEqual(response.status_code, 405)
+
+    def test_profile_requires_login(self):
+        for name in ('shop:profile', 'shop:profile_edit', 'shop:password_change'):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 302, name)
+            self.assertTrue(response.url.startswith(reverse('shop:login')), name)
+
+    def test_checkout_stores_order_owner_and_saves_delivery_data(self):
+        user = self.User.objects.create_user(username='gamer', password='strong-pass-2026')
+        Profile.objects.create(user=user)
+        self.client.force_login(user)
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 2})
+        response = self.client.post(reverse('shop:checkout'), {
+            'customer_name': 'Іван Петренко',
+            'phone': '+380501112233',
+            'email': 'gamer@example.com',
+            'city': 'Харків',
+            'address': 'вул. Тестова, 1',
+            'comment': '',
+        })
+        self.assertRedirects(response, reverse('shop:order_success'))
+        order = Order.objects.get()
+        self.assertEqual(order.user, user)
+        profile = Profile.objects.get(user=user)
+        self.assertEqual(profile.phone, '+380501112233')
+        self.assertEqual(profile.city, 'Харків')
+
+    def test_checkout_form_is_prefilled_from_profile(self):
+        user = self.User.objects.create_user(
+            username='gamer', first_name='Іван', email='gamer@example.com', password='strong-pass-2026',
+        )
+        Profile.objects.create(user=user, phone='+380501112233', city='Харків', address='вул. Тестова, 1')
+        self.client.force_login(user)
+        self.client.post(reverse('shop:cart_add', args=[self.product.pk]), {'quantity': 1})
+        response = self.client.get(reverse('shop:checkout'))
+        self.assertContains(response, '+380501112233')
+        self.assertContains(response, 'вул. Тестова, 1')
+        self.assertContains(response, 'gamer@example.com')
+
+    def test_profile_shows_only_own_orders(self):
+        first = self.User.objects.create_user(username='first', password='strong-pass-2026')
+        second = self.User.objects.create_user(username='second', password='strong-pass-2026')
+        Order.objects.create(
+            user=first, customer_name='Перший', phone='+380500000001', email='f@example.com',
+            city='Київ', address='вул. 1', total_amount=Decimal('100.00'),
+        )
+        self.client.force_login(second)
+        response = self.client.get(reverse('shop:profile'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['orders']), [])
+        self.assertContains(response, 'Заказов пока нет')
+
+        self.client.force_login(first)
+        response = self.client.get(reverse('shop:profile'))
+        self.assertEqual(response.context['orders'].count(), 1)
+
+    def test_profile_creates_missing_profile_row(self):
+        user = self.User.objects.create_user(username='olduser', password='strong-pass-2026')
+        self.client.force_login(user)
+        response = self.client.get(reverse('shop:profile'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Profile.objects.filter(user=user).exists())
+
+    def test_profile_edit_updates_user_and_profile(self):
+        user = self.User.objects.create_user(username='gamer', password='strong-pass-2026')
+        Profile.objects.create(user=user)
+        self.client.force_login(user)
+        response = self.client.post(reverse('shop:profile_edit'), {
+            'first_name': 'Іван',
+            'last_name': 'Петренко',
+            'email': 'new@example.com',
+            'phone': '+380501112233',
+            'city': 'Харків',
+            'address': 'вул. Тестова, 1',
+        })
+        self.assertRedirects(response, reverse('shop:profile'))
+        user.refresh_from_db()
+        self.assertEqual(user.get_full_name(), 'Іван Петренко')
+        self.assertEqual(user.email, 'new@example.com')
+        self.assertEqual(Profile.objects.get(user=user).city, 'Харків')
+
+    def test_password_change_keeps_session(self):
+        user = self.User.objects.create_user(username='gamer', password='strong-pass-2026')
+        self.client.force_login(user)
+        response = self.client.post(reverse('shop:password_change'), {
+            'old_password': 'strong-pass-2026',
+            'new_password1': 'another-pass-2026',
+            'new_password2': 'another-pass-2026',
+        })
+        self.assertRedirects(response, reverse('shop:profile'))
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('another-pass-2026'))
+        self.assertEqual(self.client.session['_auth_user_id'], str(user.pk))
+
+    def test_register_honours_safe_next_url(self):
+        response = self.register(username='gamer2', email='g2@example.com')
+        self.assertRedirects(response, reverse('shop:profile'))
+        response = self.client.post(reverse('shop:logout'))
+        self.assertRedirects(response, reverse('shop:home'))
+
+        self.client.get(reverse('shop:login'), {'next': '/catalog/'})
+        response = self.register(
+            username='gamer3', email='g3@example.com', next='/catalog/',
+        )
+        self.assertRedirects(response, '/catalog/')
 
 
 class EnsureAdminCommandTests(TestCase):
