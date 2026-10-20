@@ -12,6 +12,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from activity.models import AuthEvent
+from activity.utils import get_client_ip, log_auth_event
+
 from .cart import Cart
 from .forms import (
     ContactForm,
@@ -33,6 +36,14 @@ SORT_OPTIONS = {
 }
 DEFAULT_SORT = 'popular'
 PRODUCTS_PER_PAGE = 12
+
+
+def _first_form_error(form):
+    """Первое сообщение об ошибке формы — для журнала событий."""
+    for errors in form.errors.values():
+        if errors:
+            return errors[0]
+    return ''
 
 
 def _get_profile(user):
@@ -298,6 +309,7 @@ def checkout(request):
                 with transaction.atomic():
                     order = form.save(commit=False)
                     order.user = request.user
+                    order.ip_address = get_client_ip(request)
                     order.save()
 
                     total = Decimal('0.00')
@@ -338,6 +350,11 @@ def checkout(request):
 
             cart.clear()
             request.session['last_order_id'] = order.pk
+            log_auth_event(
+                request, AuthEvent.Action.ORDER,
+                user=request.user, username=request.user.username,
+                detail=f'Заказ {order.order_number} на {order.total_amount}',
+            )
             return redirect('shop:order_success')
     else:
         form = OrderForm(initial={
@@ -379,8 +396,14 @@ def register(request):
             user = form.save()
             Profile.objects.create(user=user)
             login(request, user)
+            log_auth_event(request, AuthEvent.Action.REGISTER, user=user, username=user.username)
             messages.success(request, f'Аккаунт «{user.username}» создан. Можно оформлять заказы.')
             return redirect(_safe_next_url(request, 'shop:profile'))
+        log_auth_event(
+            request, AuthEvent.Action.REGISTER_FAILED,
+            username=request.POST.get('username', ''),
+            success=False, detail=_first_form_error(form),
+        )
     else:
         form = RegisterForm()
     return render(request, 'shop/register.html', {'form': form})
@@ -395,8 +418,14 @@ def user_login(request):
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
             login(request, form.get_user())
+            log_auth_event(request, AuthEvent.Action.LOGIN, user=request.user, username=request.user.username)
             messages.success(request, f'С возвращением, {request.user.username}!')
             return redirect(_safe_next_url(request, 'shop:profile'))
+        log_auth_event(
+            request, AuthEvent.Action.LOGIN_FAILED,
+            username=request.POST.get('username', ''),
+            success=False, detail=_first_form_error(form),
+        )
     else:
         form = LoginForm(request)
     return render(request, 'shop/login.html', {'form': form})
@@ -405,6 +434,7 @@ def user_login(request):
 @require_POST
 def user_logout(request):
     """Выход из аккаунта (POST — действие защищено CSRF)."""
+    log_auth_event(request, AuthEvent.Action.LOGOUT, user=request.user, username=request.user.username)
     logout(request)
     messages.info(request, 'Вы вышли из аккаунта.')
     return redirect('shop:home')
@@ -456,6 +486,10 @@ def password_change(request):
         if form.is_valid():
             form.save()
             update_session_auth_hash(request, form.user)
+            log_auth_event(
+                request, AuthEvent.Action.PASSWORD_CHANGE,
+                user=request.user, username=request.user.username,
+            )
             messages.success(request, 'Пароль изменён.')
             return redirect('shop:profile')
     else:

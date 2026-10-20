@@ -146,6 +146,11 @@ class Order(models.Model):
     city = models.CharField('город', max_length=100)
     address = models.CharField('адрес доставки', max_length=255)
     comment = models.TextField('комментарий', blank=True)
+    ip_address = models.GenericIPAddressField(
+        'IP-адрес покупателя',
+        null=True,
+        blank=True,
+    )
     status = models.CharField(
         'статус',
         max_length=20,

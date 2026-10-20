@@ -43,9 +43,9 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'user', 'customer_name', 'phone', 'status', 'total_amount', 'created_at')
+    list_display = ('order_number', 'user', 'customer_name', 'phone', 'ip_address', 'status', 'total_amount', 'created_at')
     list_filter = ('status', 'created_at')
-    search_fields = ('order_number', 'customer_name', 'phone', 'email', 'user__username')
+    search_fields = ('order_number', 'customer_name', 'phone', 'email', 'ip_address', 'user__username')
     autocomplete_fields = ('user',)
     readonly_fields = ('order_number', 'total_amount', 'created_at', 'updated_at')
     inlines = [OrderItemInline]

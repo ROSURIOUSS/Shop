@@ -55,9 +55,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'shop.apps.ShopConfig',
+    'activity.apps.ActivityConfig',
 ]
 
 MIDDLEWARE = [
+    'activity.middleware.VisitLogMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -151,6 +153,9 @@ MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 LOGIN_URL = 'shop:login'
 LOGIN_REDIRECT_URL = 'shop:profile'
 LOGOUT_REDIRECT_URL = 'shop:home'
+
+ACTIVITY_LOG_ENABLED = os.environ.get('DJANGO_ACTIVITY_LOG', '1') == '1'
+ACTIVITY_LOG_SKIP_PREFIXES = ('/static/', '/media/', '/favicon.ico')
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
