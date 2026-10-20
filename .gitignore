@@ -1,19 +1,15 @@
-# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 
-# Django
 db.sqlite3
 media/
 staticfiles/
 
-# IDE / OS
 .idea/
 .vscode/
 .DS_Store
 
-# Служебные файлы батников (создаются при запуске)
 .requirements.lock
 .admin-check

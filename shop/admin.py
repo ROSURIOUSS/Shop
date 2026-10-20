@@ -51,7 +51,6 @@ class OrderAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
     def has_add_permission(self, request):
-        # Заказы создаются покупателями через оформление заказа.
         return False
 
 

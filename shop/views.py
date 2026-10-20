@@ -14,9 +14,6 @@ from .cart import Cart
 from .forms import ContactForm, OrderForm
 from .models import Category, ContactMessage, Order, OrderItem, Product
 
-# Варианты сортировки каталога.
-# «По популярности» — демонстрационный критерий: рекомендуемые товары
-# выводятся первыми. Реальная статистика продаж не ведётся.
 SORT_OPTIONS = {
     'popular': ('По популярности', ('-is_featured', '-created_at')),
     'price_asc': ('Сначала дешёвые', ('price',)),
@@ -65,7 +62,6 @@ def _filter_products(request, queryset):
     if max_price is not None:
         queryset = queryset.filter(price__lte=max_price)
     if max_price is not None and min_price is not None and max_price < min_price:
-        # Некорректный диапазон — результат будет пустым, но сайт не падает.
         queryset = queryset.none()
 
     queryset = queryset.order_by(*SORT_OPTIONS[sort_key][1], 'id')
@@ -101,7 +97,6 @@ def home(request):
         is_featured=True, is_available=True
     ).select_related('category')[:4]
 
-    # Новинки — свежие товары, чтобы не повторять блок «Популярное».
     featured_ids = [product.pk for product in featured_products]
     new_products = Product.objects.filter(is_available=True).exclude(
         id__in=featured_ids
@@ -282,7 +277,6 @@ def checkout(request):
 
                     total = Decimal('0.00')
                     for item in cart_items:
-                        # Блокируем строку товара и перепроверяем остаток.
                         product = Product.objects.select_for_update().get(
                             pk=item['product'].pk
                         )
@@ -292,7 +286,6 @@ def checkout(request):
                                 f'«{product.name}»: на складе осталось {product.stock} шт. '
                                 f'Уменьшите количество или уберите товар из заказа.'
                             )
-                        # Цена фиксируется на момент оформления заказа.
                         OrderItem.objects.create(
                             order=order,
                             product=product,

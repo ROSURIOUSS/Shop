@@ -310,8 +310,6 @@ class ProductionSecurityTests(TestCase):
         )
         override.enable()
         self.addCleanup(override.disable)
-        # Обычный тестовый клиент не проверяет CSRF, поэтому берём клиент
-        # с настоящей проверкой — как на боевом сервере.
         self.client = Client(enforce_csrf_checks=True)
 
     def csrf_token(self):
@@ -332,8 +330,6 @@ class ProductionSecurityTests(TestCase):
     def post_to_cart(self, origin, referer, token='skip'):
         data = {'quantity': 1}
         if token == 'skip':
-            # Сначала заходим на страницу, чтобы в клиенте появилась
-            # csrf-cookie, но сам токен в форму не кладём.
             token = self.csrf_token()
         elif token:
             data['csrfmiddlewaretoken'] = token

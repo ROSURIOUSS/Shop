@@ -9,7 +9,6 @@ urlpatterns = [
     path('', include('shop.urls')),
 ]
 
-# В режиме разработки Django сам раздаёт медиафайлы.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

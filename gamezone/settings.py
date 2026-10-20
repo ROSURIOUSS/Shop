@@ -25,8 +25,6 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Секретный ключ: для разработки используется локальный ключ.
-# В продакшене обязательно задайте переменную окружения DJANGO_SECRET_KEY.
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-gamezone-dev-only-change-me-before-publishing',
@@ -34,9 +32,6 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 
-# В разработке принимаем запросы с любого адреса (сервер виден только вам).
-# В продакшене — только домены из DJANGO_ALLOWED_HOSTS, иначе Django ответит
-# ошибкой «Invalid HTTP_HOST header».
 if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
@@ -46,8 +41,6 @@ else:
         if host.strip()
     ]
     if not ALLOWED_HOSTS:
-        # Без этого сайт отвечал бы ошибкой 400 на любой запрос, и причину
-        # пришлось бы искать в логах. Лучше остановиться сразу с подсказкой.
         raise ImproperlyConfigured(
             'DJANGO_DEBUG=0, но не задан DJANGO_ALLOWED_HOSTS. '
             'Укажите домен сайта (через запятую, если их несколько), '
@@ -75,16 +68,12 @@ MIDDLEWARE = [
     'shop.middleware.CustomDebug404Middleware',
 ]
 
-# WhiteNoise раздаёт статику (CSS, JS, картинки) без nginx — это нужно на
-# хостингах вроде Render. Подключаем только если пакет установлен:
-# для локального запуска он не обязателен и в requirements.txt не входит.
 try:
     import whitenoise  # noqa: F401
 except ImportError:
     HAS_WHITENOISE = False
 else:
     HAS_WHITENOISE = True
-    # WhiteNoise должен стоять сразу после SecurityMiddleware.
     MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 ROOT_URLCONF = 'gamezone.urls'
@@ -108,19 +97,12 @@ TEMPLATES = [
 WSGI_APPLICATION = 'gamezone.wsgi.application'
 ASGI_APPLICATION = 'gamezone.asgi.application'
 
-# База данных.
-# По умолчанию SQLite: этого достаточно локально и на PythonAnywhere
-# (там файл базы хранится на диске и никуда не пропадает).
-# На Render файловая система временная, поэтому туда лучше подключить
-# PostgreSQL через DJANGO_DATABASE_URL (пакеты — в requirements-prod.txt).
 DATABASE_URL = os.environ.get('DJANGO_DATABASE_URL', '')
 
 if DATABASE_URL:
     import dj_database_url
 
     DATABASES = {
-        # conn_max_age держит соединения открытыми — так ORM не упирается
-        # в лимит подключений бесплатной базы.
         'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600),
     }
 else:
@@ -151,20 +133,12 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Источники, которым доверяет CSRF-защита (нужны, если сайт открыт через
-# HTTPS-прокси с другим доменом — например, онлайн-предпросмотр проекта).
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
 ]
-if DEBUG:
-    # Онлайн-предпросмотр учебного проекта (домен *.e2b.app).
-    CSRF_TRUSTED_ORIGINS.append('https://*.e2b.app')
-else:
-    # Хостинг работает по HTTPS, поэтому домены из ALLOWED_HOSTS сразу
-    # добавляем в доверенные — без этого формы (корзина, оформление заказа)
-    # отвечали бы ошибкой 403.
+if not DEBUG:
     for host in ALLOWED_HOSTS:
         if host == '*':
             continue
@@ -172,31 +146,21 @@ else:
         if origin not in CSRF_TRUSTED_ORIGINS:
             CSRF_TRUSTED_ORIGINS.append(origin)
 
-# Сообщения об успехе/ошибках (добавление в корзину, оформление заказа)
 MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 
-# --- Продакшен-настройки: действуют только при DEBUG=False -------------------
 if not DEBUG:
-    # Хостинги сами выдают HTTPS; Django стоит за прокси, поэтому доверяем
-    # его заголовку и перенаправляем http-запросы на https.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SSL_REDIRECT', '1') == '1'
 
-    # Cookies корзины и админки передаются только по HTTPS.
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
-    # Браузеры будут ходить только по HTTPS (час — безопасное стартовое
-    # значение; увеличивают, когда убедятся, что HTTPS работает стабильно).
     SECURE_HSTS_SECONDS = 60 * 60
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
     X_FRAME_OPTIONS = 'DENY'
 
 if HAS_WHITENOISE:
-    # Сжимаем статику при отдаче. Намеренно без Manifest-варианта: тот
-    # требует, чтобы все файлы из url(...) в CSS существовали, и сборка
-    # падает из-за одной недостающей картинки.
     STORAGES = {
         'default': {
             'BACKEND': 'django.core.files.storage.FileSystemStorage',

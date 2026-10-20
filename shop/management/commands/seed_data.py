@@ -50,7 +50,6 @@ CATEGORIES = [
     },
 ]
 
-# Демонстрационные цены в гривнах. Это учебные данные, а не актуальные цены.
 PRODUCTS = [
     {
         'name': 'Logitech G102',
@@ -336,7 +335,6 @@ class Command(BaseCommand):
             if created:
                 created_categories += 1
             else:
-                # Обновляем описание, но не трогаем пользовательские изменения названия.
                 category.description = data['description']
                 category.save(update_fields=['description'])
 

@@ -327,8 +327,8 @@ Netlify раздаёт статические файлы и serverless-функ�
 `requirements-prod.txt`, команда `ensure_admin` и боевые настройки
 в `gamezone/settings.py`.
 
-1. Проект должен быть в репозитории GitHub (здесь это `ROSURIOUSS/Shop`,
-   ветка `arena/0bf33871-shop`).
+1. Проект должен лежать в репозитории GitHub. При создании сервиса выберите
+   ветку, в которой находится код.
 2. Откройте <https://render.com>, войдите через GitHub.
 3. **New +** → **Blueprint** → выберите репозиторий. Render найдёт `render.yaml`
    и сам создаст сервис с нужными командами.

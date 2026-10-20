@@ -21,7 +21,6 @@ class Cart:
         cart = self.session.get(SESSION_KEY)
         if cart is None:
             cart = self.session[SESSION_KEY] = {}
-        # Ключи сессии сериализуются в JSON, поэтому id хранятся как строки.
         self.cart = cart
 
     def save(self):
@@ -32,7 +31,6 @@ class Cart:
         quantity = max(int(quantity), 1)
         product_id = str(product.pk)
         current = int(self.cart.get(product_id, 0))
-        # Не даём добавить больше, чем есть на складе.
         quantity = min(current + quantity, product.stock)
         self.cart[product_id] = quantity
         self.save()
@@ -69,7 +67,6 @@ class Cart:
         """
         product_ids = [int(pid) for pid in self.cart.keys()]
         products = Product.objects.filter(id__in=product_ids).select_related('category')
-        # Сохраняем порядок добавления товаров в корзину.
         products_by_id = {product.pk: product for product in products}
         for product_id, quantity in self.cart.items():
             product = products_by_id.get(int(product_id))

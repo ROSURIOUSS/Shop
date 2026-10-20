@@ -122,8 +122,6 @@ class Order(models.Model):
         choices=Status.choices,
         default=Status.NEW,
     )
-    # Итоговая сумма фиксируется при создании заказа и пересчитывается
-    # из позиций методом get_total_cost().
     total_amount = models.DecimalField('общая сумма, ₴', max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField('дата создания', auto_now_add=True)
     updated_at = models.DateTimeField('дата изменения', auto_now=True)

@@ -47,7 +47,6 @@ class Command(BaseCommand):
             return
 
         if user_model.objects.filter(username=username).exists():
-            # Логин занят обычным пользователем: перезаписывать его нельзя.
             self.stdout.write(self.style.WARNING(
                 f'Пользователь "{username}" уже существует — пропускаю. '
                 f'Права администратора можно выдать ему через /admin/.'
@@ -56,8 +55,6 @@ class Command(BaseCommand):
 
         email = os.environ.get('DJANGO_SUPERUSER_EMAIL', '').strip()
         if not email:
-            # Поле e-mail у модели пользователя обязательное, но для учебного
-            # проекта достаточно технического адреса.
             email = f'{username}@gamezone.local'
 
         user_model.objects.create_superuser(

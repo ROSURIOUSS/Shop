@@ -1,40 +1,26 @@
-# Blueprint для Render (https://render.com) — бесплатный тариф.
-# Как использовать: New + → Blueprint → выбрать репозиторий с проектом.
-# Render прочитает этот файл и сам создаст сервис с нужными командами.
-#
-# После создания зайдите в Environment и укажите DJANGO_ALLOWED_HOSTS —
-# адрес вида <имя-сервиса>.onrender.com (он виден в шапке сервиса).
-
 services:
   - type: web
     name: gamezone
     runtime: python
     plan: free
 
-    # Ставим серверные зависимости и собираем статику в папку staticfiles.
     buildCommand: >-
       pip install -r requirements-prod.txt &&
       python manage.py collectstatic --noinput
 
-    # При каждом старте: миграции, демо-товары (только в пустую базу),
-    # администратор из переменных окружения — и сам сервер gunicorn.
     startCommand: >-
       python manage.py migrate --noinput &&
       python manage.py seed_data --if-empty &&
       python manage.py ensure_admin &&
-      gunicorn gamezone.wsgi:application
+      gunicorn gamezone.wsgi:application --bind 0.0.0.0:$PORT --workers 2
 
     envVars:
       - key: DJANGO_DEBUG
         value: "0"
-      # Секретный ключ Django — Render сгенерирует случайное значение.
       - key: DJANGO_SECRET_KEY
         generateValue: true
-      # Задайте вручную: gamezone.onrender.com (адрес вашего сервиса).
       - key: DJANGO_ALLOWED_HOSTS
         sync: false
-      # Логин и пароль администратора: нужны, чтобы войти в /admin/.
-      # Придумайте свои — в коде проекта паролей нет.
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_PASSWORD
