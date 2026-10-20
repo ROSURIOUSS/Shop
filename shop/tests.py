@@ -1,6 +1,8 @@
-"""Тесты моделей, корзины, оформления заказа и аккаунтов покупателей."""
+"""Тесты моделей, корзины, оформления заказа, аккаунтов и резервных копий."""
+import json
 import os
 import re
+import tempfile
 from decimal import Decimal
 from io import StringIO
 from unittest import mock
@@ -9,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -705,3 +708,124 @@ class DashboardTests(TestCase):
         response = self.client.get('/admin/')
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith('/admin/login/'))
+
+class BackupRestoreTests(TestCase):
+    """Резервное копирование: данные переживают перенос и потерю базы."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.category = make_category()
+        self.product = make_product(self.category, stock=5)
+
+    def make_data(self):
+        user = self.User.objects.create_user(
+            username='gamer', email='gamer@example.com', password='strong-pass-2026',
+        )
+        Profile.objects.create(
+            user=user, phone='+380501112233', city='Харків', address='вул. Тестова, 1',
+        )
+        order = Order.objects.create(
+            user=user, customer_name='Іван Петренко', phone='+380501112233',
+            email='gamer@example.com', city='Харків', address='вул. Тестова, 1',
+            total_amount=Decimal('1998.00'), ip_address='93.184.216.34',
+        )
+        OrderItem.objects.create(order=order, product=self.product, quantity=2, price=self.product.price)
+        return user, order
+
+    def read(self, path):
+        with open(path, encoding='utf-8') as stream:
+            return json.load(stream)
+
+    def test_backup_saves_users_orders_and_products(self):
+        self.make_data()
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'copy.json')
+            output = StringIO()
+            call_command('backup_data', output=target, stdout=output)
+
+            self.assertTrue(os.path.exists(target))
+            models = {item['model'] for item in self.read(target)}
+            self.assertIn('auth.user', models)
+            self.assertIn('shop.profile', models)
+            self.assertIn('shop.order', models)
+            self.assertIn('shop.orderitem', models)
+            self.assertIn('shop.product', models)
+            self.assertNotIn('activity.visitlog', models)
+            self.assertIn('Резервная копия сохранена', output.getvalue())
+
+    def test_backup_creates_missing_folders(self):
+        self.make_data()
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'nested', 'deep', 'copy.json')
+            call_command('backup_data', output=target)
+            self.assertTrue(os.path.exists(target))
+
+    def test_backup_stores_password_hash_only(self):
+        self.make_data()
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'copy.json')
+            call_command('backup_data', output=target)
+            record = next(item for item in self.read(target) if item['model'] == 'auth.user')
+            self.assertNotEqual(record['fields']['password'], 'strong-pass-2026')
+            self.assertTrue(record['fields']['password'].startswith('pbkdf2_sha256$'))
+
+    def test_backup_can_include_activity_logs(self):
+        self.make_data()
+        VisitLog.objects.create(ip_address='93.184.216.34', path='/catalog/', method='GET', status_code=200)
+        AuthEvent.objects.create(action=AuthEvent.Action.LOGIN, success=True, username='gamer')
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'copy.json')
+            call_command('backup_data', output=target, with_logs=True)
+            models = {item['model'] for item in self.read(target)}
+            self.assertIn('activity.visitlog', models)
+            self.assertIn('activity.authevent', models)
+
+    def test_restore_brings_back_deleted_data(self):
+        user, order = self.make_data()
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'copy.json')
+            call_command('backup_data', output=target)
+
+            Order.objects.all().delete()
+            self.User.objects.all().delete()
+            self.assertEqual(self.User.objects.count(), 0)
+            self.assertEqual(Order.objects.count(), 0)
+
+            call_command('restore_data', target)
+
+            restored_user = self.User.objects.get(username='gamer')
+            self.assertTrue(restored_user.check_password('strong-pass-2026'))
+            self.assertEqual(restored_user.email, 'gamer@example.com')
+            self.assertEqual(Profile.objects.filter(user=restored_user).count(), 1)
+            self.assertEqual(Profile.objects.get(user=restored_user).city, 'Харків')
+
+            restored_order = Order.objects.get(order_number=order.order_number)
+            self.assertEqual(restored_order.user, restored_user)
+            self.assertEqual(restored_order.total_amount, Decimal('1998.00'))
+            self.assertEqual(restored_order.ip_address, '93.184.216.34')
+            self.assertEqual(restored_order.items.count(), 1)
+            self.assertEqual(restored_order.items.get().product, self.product)
+
+    def test_restore_show_only_does_not_touch_database(self):
+        self.make_data()
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'copy.json')
+            call_command('backup_data', output=target)
+            self.User.objects.all().delete()
+
+            output = StringIO()
+            call_command('restore_data', target, show=True, stdout=output)
+            self.assertEqual(self.User.objects.count(), 0)
+            self.assertIn('shop.order', output.getvalue())
+
+    def test_restore_missing_file_raises(self):
+        with self.assertRaises(CommandError):
+            call_command('restore_data', 'no-such-backup.json')
+
+    def test_restore_rejects_foreign_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, 'not-a-backup.json')
+            with open(target, 'w', encoding='utf-8') as stream:
+                stream.write('{"это": "не копия"}')
+            with self.assertRaises(CommandError):
+                call_command('restore_data', target)
