@@ -13,3 +13,7 @@ staticfiles/
 .idea/
 .vscode/
 .DS_Store
+
+# Служебные файлы батников (создаются при запуске)
+.requirements.lock
+.admin-check

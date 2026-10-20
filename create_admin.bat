@@ -14,10 +14,12 @@ echo  символы видны на экране (для учебного пр�
 echo.
 
 rem ---------- Определяем Python ----------
-rem Приоритет: виртуальное окружение .venv, затем лаунчер py, затем python.
+rem Приоритет: интерпретатор, который уже выбрал run.bat, затем окружение
+rem .venv, затем лаунчер py, затем python.
 rem Проверяем именно запуск команды, а не where: подставла Microsoft Store
 rem (WindowsApps\python.exe) находится в PATH, но не является настоящим Python.
 set "VPY=.venv\Scripts\python.exe"
+if defined GAMEZONE_PYTHON set "VPY=%GAMEZONE_PYTHON%"
 if exist "%VPY%" goto have_python
 set "VPY=py"
 %VPY% --version >nul 2>&1
@@ -80,6 +82,7 @@ echo.
 echo  Готово! Администратор "%ADMUSER%" создан.
 echo  Войти в админ-панель: http://127.0.0.1:8000/admin/
 echo  (сначала должен работать сервер: run.bat или PyCharm).
+echo  Повторно создавать администратора run.bat больше не предложит.
 echo.
 pause
 endlocal
