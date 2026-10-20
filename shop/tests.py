@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+from pathlib import Path
 from decimal import Decimal
 from io import StringIO
 from unittest import mock
@@ -595,6 +596,9 @@ class DashboardTests(TestCase):
     def test_admin_is_branded(self):
         response = self.dashboard()
         self.assertContains(response, 'GameZone — управление магазином')
+        self.assertContains(response, 'gzh-brand')
+        self.assertContains(response, 'shop/images/logo.svg')
+        self.assertContains(response, 'панель управления')
 
     def test_dashboard_is_not_shown_on_login_page(self):
         response = self.client.get('/admin/login/')
@@ -949,3 +953,50 @@ class DbStatusCommandTests(TestCase):
             fake_connection.ensure_connection.return_value = None
             call_command('db_status', ping=True, stdout=output)
         self.assertIn('Подключение к базе работает', output.getvalue())
+
+class AdminThemeTests(TestCase):
+    """Админ-панель оформлена в стиле магазина: тёмная тема и логотип."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.theme_path = Path(__file__).resolve().parent / 'static' / 'shop' / 'css' / 'admin-theme.css'
+
+    def test_login_page_is_themed(self):
+        response = self.client.get('/admin/login/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'shop/css/admin-theme.css')
+        self.assertContains(response, 'gzh-brand')
+        self.assertContains(response, 'shop/images/logo.svg')
+        self.assertContains(response, 'Inter')
+
+    def test_admin_pages_include_theme(self):
+        self.client.force_login(self.superuser)
+        for url in ('/admin/', '/admin/shop/product/', '/admin/shop/order/',
+                    '/admin/activity/visitlog/', '/admin/auth/user/'):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200, url)
+            self.assertContains(response, 'shop/css/admin-theme.css', msg_prefix=url)
+            self.assertContains(response, 'gzh-shop-link', msg_prefix=url)
+
+    def test_theme_uses_site_palette(self):
+        css = self.theme_path.read_text(encoding='utf-8')
+        site_css = (Path(__file__).resolve().parent / 'static' / 'shop' / 'css' / 'style.css').read_text(encoding='utf-8')
+        for color in ('#0B0B10', '#15151F', '#292936', '#8B5CF6', '#A78BFA', '#22D3EE'):
+            self.assertIn(color, css, f'в теме админки нет цвета {color}')
+            self.assertIn(color, site_css, f'в теме магазина нет цвета {color}')
+        self.assertIn("'Inter'", css)
+
+    def test_theme_overrides_admin_variables(self):
+        css = self.theme_path.read_text(encoding='utf-8')
+        for variable in ('--primary', '--body-bg', '--body-fg', '--link-fg',
+                         '--hairline-color', '--darkened-bg', '--header-bg'):
+            self.assertIn(variable + ':', css, f'не переопределена переменная {variable}')
+
+    def test_theme_is_forced_for_every_color_scheme(self):
+        css = self.theme_path.read_text(encoding='utf-8')
+        head = css.split('{', 1)[0]
+        for selector in (':root', 'html[data-theme="light"]', 'html[data-theme="dark"]', 'html[data-theme="auto"]'):
+            self.assertIn(selector, head)

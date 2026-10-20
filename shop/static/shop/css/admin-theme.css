@@ -1,0 +1,636 @@
+/* =========================================================
+   Тема админ-панели GameZone
+   Та же палитра, что и у магазина: тёмный фон, фиолетовый
+   акцент, голубые ссылки, шрифт Inter.
+   Переопределяются переменные темы Django Admin, поэтому
+   оформление работает на всех страницах админки сразу.
+   ========================================================= */
+
+:root,
+html[data-theme="light"],
+html[data-theme="dark"],
+html[data-theme="auto"] {
+  --gzh-bg: #0B0B10;
+  --gzh-header: #101018;
+  --gzh-card: #15151F;
+  --gzh-alt: #11111A;
+  --gzh-border: #292936;
+  --gzh-text: #F5F5F7;
+  --gzh-muted: #A1A1AA;
+  --gzh-purple: #8B5CF6;
+  --gzh-purple-dark: #7C3AED;
+  --gzh-purple-light: #A78BFA;
+  --gzh-cyan: #22D3EE;
+  --gzh-success: #22C55E;
+  --gzh-warning: #FBBF24;
+  --gzh-error: #EF4444;
+  --gzh-radius: 12px;
+  --gzh-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+
+  --primary: #8B5CF6;
+  --primary-fg: #FFFFFF;
+  --secondary: #101018;
+  --accent: #22D3EE;
+
+  --body-fg: #F5F5F7;
+  --body-bg: #0B0B10;
+  --body-quiet-color: #A1A1AA;
+  --body-medium-color: #D4D4D8;
+  --body-loud-color: #FFFFFF;
+
+  --header-color: #F5F5F7;
+  --header-branding-color: #A78BFA;
+  --header-bg: #101018;
+  --header-link-color: #F5F5F7;
+
+  --breadcrumbs-fg: #A1A1AA;
+  --breadcrumbs-link-fg: #A78BFA;
+  --breadcrumbs-bg: #11111A;
+
+  --link-fg: #A78BFA;
+  --link-hover-color: #22D3EE;
+  --link-selected-fg: #22D3EE;
+
+  --hairline-color: #292936;
+  --border-color: #292936;
+
+  --error-fg: #EF4444;
+
+  --message-success-bg: rgba(34, 197, 94, 0.16);
+  --message-warning-bg: rgba(251, 191, 36, 0.16);
+  --message-error-bg: rgba(239, 68, 68, 0.16);
+  --message-info-bg: rgba(34, 211, 238, 0.16);
+  --message-debug-bg: #1F1F2B;
+
+  --darkened-bg: #11111A;
+  --selected-bg: #1B1B27;
+  --selected-row: rgba(139, 92, 246, 0.18);
+
+  --button-bg: #8B5CF6;
+  --button-fg: #FFFFFF;
+  --button-hover-bg: #7C3AED;
+  --default-button-bg: #8B5CF6;
+  --default-button-hover-bg: #7C3AED;
+  --close-button-bg: #292936;
+  --close-button-hover-bg: #3A3A4A;
+  --delete-button-bg: #B91C1C;
+  --delete-button-hover-bg: #DC2626;
+
+  --object-tools-bg: #292936;
+  --object-tools-fg: #F5F5F7;
+  --object-tools-hover-bg: #8B5CF6;
+
+  --font-family-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ---------- База ---------- */
+body {
+  font-family: var(--font-family-primary);
+  background: var(--gzh-bg);
+  color: var(--gzh-text);
+}
+
+#container {
+  background: var(--gzh-bg);
+}
+
+a:link,
+a:visited {
+  color: var(--link-fg);
+}
+
+a:hover {
+  color: var(--link-hover-color);
+}
+
+.theme-toggle {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--gzh-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gzh-border);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a4a;
+}
+
+/* ---------- Шапка ---------- */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 28px;
+  background: linear-gradient(180deg, #17171f 0%, #101018 100%);
+  border-bottom: 1px solid var(--gzh-border);
+  color: var(--gzh-text);
+}
+
+#branding {
+  float: none;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+#user-tools {
+  margin-left: auto;
+}
+
+.gzh-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.gzh-brand__mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+.gzh-brand__name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--gzh-text);
+}
+
+.gzh-brand__accent {
+  color: var(--gzh-purple-light);
+}
+
+.gzh-brand__note {
+  padding: 3px 9px;
+  border: 1px solid var(--gzh-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gzh-muted);
+}
+
+#user-tools {
+  padding: 0;
+  font-size: 13px;
+  color: var(--gzh-muted);
+}
+
+#user-tools a {
+  color: var(--gzh-purple-light);
+  border-bottom-color: transparent;
+}
+
+#user-tools a:hover {
+  color: var(--gzh-cyan);
+}
+
+.gzh-shop-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border: 1px solid var(--gzh-border);
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.12);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gzh-purple-light);
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.gzh-shop-link:hover {
+  background: var(--gzh-purple);
+  color: #fff;
+}
+
+/* ---------- Хлебные крошки и заголовки ---------- */
+div.breadcrumbs {
+  padding: 10px 28px;
+  background: var(--gzh-alt);
+  border-top: 1px solid var(--gzh-border);
+  border-bottom: 1px solid var(--gzh-border);
+  color: var(--gzh-muted);
+}
+
+div.breadcrumbs a {
+  color: var(--breadcrumbs-link-fg);
+}
+
+#content {
+  padding: 24px 28px;
+}
+
+#content h1,
+#content-main h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--gzh-text);
+}
+
+.module h2,
+.module caption,
+.module caption a,
+.inline-group h2,
+#content-related .module h2 {
+  background: var(--gzh-purple);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.module h2 a,
+.module caption a {
+  color: #fff;
+}
+
+/* ---------- Модули и карточки ---------- */
+.module {
+  border: 1px solid var(--gzh-border);
+  border-radius: var(--gzh-radius);
+  background: var(--gzh-card);
+  box-shadow: var(--gzh-shadow);
+  margin-bottom: 20px;
+}
+
+div.module {
+  overflow: hidden;
+}
+
+.module p,
+.module ul,
+.module h3,
+.module h4 {
+  color: var(--gzh-text);
+}
+
+fieldset.module {
+  border-color: var(--gzh-border);
+}
+
+caption,
+caption a {
+  color: #fff;
+}
+
+/* ---------- Таблицы ---------- */
+table {
+  border-color: var(--gzh-border);
+}
+
+thead th {
+  background: var(--gzh-alt);
+  color: var(--gzh-text);
+  font-weight: 600;
+}
+
+thead th a:link,
+thead th a:visited {
+  color: var(--gzh-text);
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--gzh-border);
+}
+
+tbody tr:hover {
+  background: rgba(139, 92, 246, 0.07);
+}
+
+tbody tr.selected,
+tr.selected {
+  background: var(--selected-row);
+}
+
+#result_list .actions,
+.results table {
+  border-color: var(--gzh-border);
+}
+
+/* ---------- Кнопки ---------- */
+.button,
+.button:link,
+.button:visited,
+input[type=submit],
+input[type=button],
+.submit-row input,
+.submit-row a.deletelink,
+.object-tools a:link,
+.object-tools a:visited {
+  border-radius: 8px;
+  font-family: var(--font-family-primary);
+  font-weight: 600;
+}
+
+.button.default,
+input[type=submit].default,
+.submit-row input.default {
+  background: var(--gzh-purple);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.35);
+}
+
+.button.default:hover,
+input[type=submit].default:hover,
+.submit-row input.default:hover {
+  background: var(--gzh-purple-dark);
+}
+
+.button,
+input[type=submit],
+.submit-row input {
+  background: var(--gzh-purple);
+  color: #fff;
+}
+
+.button:hover,
+input[type=submit]:hover,
+.submit-row input:hover {
+  background: var(--gzh-purple-dark);
+}
+
+.button.cancel:hover,
+input[type=submit].cancel:hover {
+  background: var(--gzh-error);
+}
+
+.object-tools a {
+  background: var(--gzh-purple);
+  color: #fff;
+}
+
+.object-tools a:hover {
+  background: var(--gzh-purple-dark);
+}
+
+.submit-row {
+  padding: 14px 0;
+  border-color: var(--gzh-border);
+  background: transparent;
+}
+
+/* ---------- Формы ---------- */
+input[type=text],
+input[type=password],
+input[type=email],
+input[type=url],
+input[type=number],
+input[type=tel],
+input[type=date],
+input[type=time],
+input[type=search],
+textarea,
+select {
+  border: 1px solid var(--gzh-border);
+  border-radius: 8px;
+  background: var(--gzh-alt);
+  color: var(--gzh-text);
+  font-family: var(--font-family-primary);
+}
+
+select option {
+  background: var(--gzh-card);
+  color: var(--gzh-text);
+}
+
+input[type=text]:focus,
+input[type=password]:focus,
+input[type=email]:focus,
+input[type=number]:focus,
+input[type=search]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--gzh-purple);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.22);
+}
+
+.form-row label,
+.aligned label,
+fieldset .fieldBox label {
+  color: var(--gzh-text);
+  font-weight: 600;
+}
+
+.help,
+div.help,
+.form-row p.help {
+  color: var(--gzh-muted);
+}
+
+.errornote,
+ul.errorlist {
+  border-radius: 8px;
+  color: #FECACA;
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.errors,
+.form-row.errors {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ---------- Список объектов: поиск, фильтры, пагинация ---------- */
+#toolbar,
+#changelist .results,
+#changelist .paginator,
+#changelist-filter {
+  border-color: var(--gzh-border);
+}
+
+#toolbar #searchbar,
+#changelist-search input[type=search],
+#changelist-search input[type=text] {
+  border: 1px solid var(--gzh-border);
+  border-radius: 8px;
+  background: var(--gzh-alt);
+  color: var(--gzh-text);
+}
+
+#changelist-filter {
+  background: var(--gzh-card);
+  border-radius: var(--gzh-radius);
+  padding: 16px;
+}
+
+#changelist-filter h2 {
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+#changelist-filter h3 {
+  color: var(--gzh-muted);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+#changelist-filter li.selected a {
+  color: var(--gzh-cyan);
+}
+
+#changelist-filter a:hover {
+  color: var(--gzh-purple-light);
+}
+
+.paginator a:link,
+.paginator a:visited,
+.paginator .this-page {
+  border-radius: 8px;
+}
+
+.paginator .this-page {
+  background: var(--gzh-purple);
+  color: #fff;
+}
+
+.actions label,
+.actions span.all,
+.actions span.question,
+.actions span.action-counter {
+  color: var(--gzh-muted);
+}
+
+/* ---------- Боковая навигация ---------- */
+#nav-sidebar,
+#nav-filter {
+  border-color: var(--gzh-border);
+  background: var(--gzh-card);
+  color: var(--gzh-text);
+}
+
+#nav-sidebar .current-app .section:link,
+#nav-sidebar .current-app .section:visited {
+  color: var(--gzh-purple-light);
+}
+
+#nav-sidebar a:hover {
+  color: var(--gzh-cyan);
+}
+
+/* ---------- Главная страница админки ---------- */
+.dashboard #content-main .module table {
+  border: none;
+}
+
+.dashboard #content-main .module th,
+.dashboard #content-main .module td {
+  border-bottom: 1px solid var(--gzh-border);
+  padding: 10px 12px;
+}
+
+.dashboard #content-main .module tr:last-child th,
+.dashboard #content-main .module tr:last-child td {
+  border-bottom: none;
+}
+
+#content-related .module h2 {
+  border-radius: 0;
+}
+
+#recent-actions-module ul.actionlist li {
+  border-bottom: 1px solid var(--gzh-border);
+  color: var(--gzh-muted);
+}
+
+/* ---------- Страница входа ---------- */
+body.login {
+  background: radial-gradient(1200px 500px at 50% -10%, rgba(139, 92, 246, 0.18), transparent 70%), var(--gzh-bg);
+}
+
+body.login #container {
+  width: 26em;
+  max-width: 460px;
+  margin: 10vh auto 40px;
+  padding: 28px 30px 26px;
+  border: 1px solid var(--gzh-border);
+  border-radius: 18px;
+  background: var(--gzh-card);
+  box-shadow: var(--gzh-shadow);
+}
+
+body.login #header {
+  padding: 0 0 18px;
+  background: none;
+  border-bottom: 1px solid var(--gzh-border);
+}
+
+body.login .gzh-brand__note {
+  display: none;
+}
+
+body.login #content {
+  padding: 22px 0 0;
+}
+
+body.login .submit-row {
+  padding: 8px 0 0;
+}
+
+body.login .submit-row input[type=submit] {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+}
+
+body.login .errornote {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+body.login #footer,
+body.login div.breadcrumbs {
+  display: none;
+}
+
+/* ---------- Подвал ---------- */
+#footer {
+  padding: 20px 28px 28px;
+  color: var(--gzh-muted);
+  border-top: 1px solid var(--gzh-border);
+  background: var(--gzh-header);
+  clear: both;
+}
+
+.gzh-footer {
+  font-size: 12px;
+  color: var(--gzh-muted);
+}
+
+/* ---------- Узкие экраны ---------- */
+@media (max-width: 767px) {
+  #header {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .gzh-brand__note {
+    display: none;
+  }
+
+  #content,
+  div.breadcrumbs,
+  #footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  body.login #container {
+    margin: 6vh auto 24px;
+    padding: 22px 20px;
+  }
+}

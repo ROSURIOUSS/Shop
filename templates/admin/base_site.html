@@ -1,0 +1,51 @@
+{% extends 'admin/base.html' %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | GameZone{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="icon" type="image/svg+xml" href="{% static 'shop/images/logo.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'shop/css/admin-theme.css' %}">
+  <style>
+    :root,
+    html[data-theme="light"],
+    html[data-theme="dark"],
+    html[data-theme="auto"] {
+      --message-success-icon: url("{% static 'admin/img/icon-yes-dark.svg' %}");
+      --message-warning-icon: url("{% static 'admin/img/icon-alert-dark.svg' %}");
+      --message-error-icon: url("{% static 'admin/img/icon-no-dark.svg' %}");
+      --message-info-icon: url("{% static 'admin/img/icon-info-dark.svg' %}");
+      --message-debug-icon: url("{% static 'admin/img/icon-debug-dark.svg' %}");
+    }
+  </style>
+{% endblock %}
+
+{% block branding %}
+  <a class="gzh-brand" href="{% url 'admin:index' %}"
+     title="{{ site_header|default:'GameZone' }}"
+     aria-label="{{ site_header|default:'GameZone' }}">
+    <img class="gzh-brand__mark" src="{% static 'shop/images/logo.svg' %}" alt="" width="34" height="34">
+    <span class="gzh-brand__name">Game<span class="gzh-brand__accent">Zone</span></span>
+    <span class="gzh-brand__note">панель управления</span>
+  </a>
+{% endblock %}
+
+{% block nav-global %}
+  <a class="gzh-shop-link" href="{% url 'shop:home' %}" target="_blank" rel="noopener">
+    Открыть магазин
+  </a>
+{% endblock %}
+
+{% block footer %}
+  <div class="gzh-footer">
+    GameZone — учебный интернет-магазин: товары, цены и контакты демонстрационные
+  </div>
+{% endblock %}
