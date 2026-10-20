@@ -175,6 +175,8 @@ gamezone/                 # корень проекта (этот репозит
 ├── requirements.txt      # зависимости для локальной работы
 ├── requirements-prod.txt # зависимости для публикации в интернете
 ├── render.yaml           # готовый конфиг бесплатного хостинга Render
+├── Dockerfile            # сборка контейнера (Render с рантаймом Docker, VPS)
+├── .dockerignore         # что не класть в контейнер
 ├── Procfile              # команда запуска сервера (gunicorn)
 ├── .python-version       # версия Python для хостинга
 ├── gamezone/             # настройки проекта
@@ -265,6 +267,22 @@ pip install -r requirements.txt
 и предложит открыть работающий магазин в браузере либо запуститься на другом
 порту (`run.bat 8080`).
 
+**На хостинге сайт отвечает ошибкой 400 на все страницы**
+
+Значит, `DJANGO_DEBUG=0`, но не задан `DJANGO_ALLOWED_HOSTS` — Django не знает,
+какие домены считать своими. Теперь в этом случае проект не стартует и пишет
+в лог понятное сообщение с примером. Задайте переменную на хостинге:
+
+```
+DJANGO_ALLOWED_HOSTS=ваш-сервис.onrender.com
+```
+
+**Сборка на хостинге ищет Dockerfile и не находит его**
+
+Так выглядит сервис, созданный с рантаймом Docker. Либо перезапустите деплой
+(`Dockerfile` в проекте есть), либо создайте сервис заново с рантаймом
+**Python 3** — тогда используются команды из `render.yaml`.
+
 **Ошибка про `WindowsApps\python.exe` при запуске батников**
 
 Это подставла Microsoft Store, а не настоящий Python. Установите Python
@@ -333,6 +351,14 @@ Netlify раздаёт статические файлы и serverless-функ�
    и запустит gunicorn.
 6. Откройте `https://ваш-сервис.onrender.com/` и
    `https://ваш-сервис.onrender.com/admin/`.
+
+**Если Render собирает проект как Docker.** При создании сервиса вручную можно
+случайно выбрать рантайм Docker вместо Python — тогда в логе сборки будет
+`failed to read dockerfile: open Dockerfile: no such file or directory`.
+В проекте есть `Dockerfile`, поэтому достаточно перезапустить деплой
+(**Manual Deploy** → **Deploy latest commit**). При желании рантайм можно
+сменить на Python 3: **Settings** → **Build** → **Source** → **Edit** →
+выбрать Python 3 и указать команды из `render.yaml`.
 
 Честно об ограничениях бесплатного тарифа Render:
 

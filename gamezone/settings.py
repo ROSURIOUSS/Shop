@@ -21,6 +21,8 @@ DJANGO_DEBUG:
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Секретный ключ: для разработки используется локальный ключ.
@@ -43,6 +45,14 @@ else:
         for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
         if host.strip()
     ]
+    if not ALLOWED_HOSTS:
+        # Без этого сайт отвечал бы ошибкой 400 на любой запрос, и причину
+        # пришлось бы искать в логах. Лучше остановиться сразу с подсказкой.
+        raise ImproperlyConfigured(
+            'DJANGO_DEBUG=0, но не задан DJANGO_ALLOWED_HOSTS. '
+            'Укажите домен сайта (через запятую, если их несколько), '
+            'например: DJANGO_ALLOWED_HOSTS=gamezone.onrender.com'
+        )
 
 INSTALLED_APPS = [
     'django.contrib.admin',
