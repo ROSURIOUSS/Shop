@@ -1,0 +1,15 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {% for button in transition_buttons %}
+    <li class="gzh-transition">
+      <form method="post" action="{{ button.url }}">
+        {% csrf_token %}
+        <button type="submit" class="gzh-transition__button gzh-transition__button--{{ button.code }}">
+          {{ button.label }}
+        </button>
+      </form>
+    </li>
+  {% endfor %}
+  {{ block.super }}
+{% endblock %}

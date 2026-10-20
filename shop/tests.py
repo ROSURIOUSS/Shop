@@ -41,6 +41,7 @@ from .models import (
     Review,
     with_rating,
 )
+from .orders import OrderTransitionError, cancel_order, change_status
 from .recommendations import bought_together
 from .templatetags.shop_extras import plural_ru
 
@@ -2163,3 +2164,311 @@ class PasswordResetTests(TestCase):
         response = self.client.get(reverse('shop:password_reset_complete'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Пароль изменён')
+
+
+class OrderStatusFlowTests(TestCase):
+    """Правила переходов статусов: что разрешено и что происходит при отмене."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(username='buyer', password='secret-pass-2026')
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('500'), stock=10)
+        self.coupon = Coupon.objects.create(
+            code='GAME10', value=Decimal('10'), usage_limit=5, used_count=1,
+        )
+        self.order = Order.objects.create(
+            user=self.user, customer_name='Олена', phone='+380671234567',
+            city='Харків', address='Сумська, 10', status=Order.Status.NEW,
+            coupon=self.coupon, discount_amount=Decimal('50.00'),
+            total_amount=Decimal('450.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=2, price=Decimal('500.00'),
+        )
+
+    def test_new_order_transitions(self):
+        self.assertEqual(
+            self.order.allowed_transitions(),
+            [Order.Status.CONFIRMED, Order.Status.CANCELLED],
+        )
+        self.assertTrue(self.order.can_move_to(Order.Status.CONFIRMED))
+        self.assertFalse(self.order.can_move_to(Order.Status.COMPLETED))
+
+    def test_shipped_order_can_only_complete(self):
+        self.order.status = Order.Status.SHIPPED
+        self.assertEqual(self.order.allowed_transitions(), [Order.Status.COMPLETED])
+        self.assertFalse(self.order.can_be_cancelled())
+
+    def test_final_statuses_have_no_transitions(self):
+        for status in (Order.Status.COMPLETED, Order.Status.CANCELLED):
+            self.order.status = status
+            self.assertEqual(self.order.allowed_transitions(), [], status)
+
+    def test_change_status_moves_order(self):
+        updated = change_status(self.order, Order.Status.CONFIRMED)
+        self.assertEqual(updated.status, Order.Status.CONFIRMED)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CONFIRMED)
+
+    def test_change_status_rejects_wrong_transition(self):
+        with self.assertRaises(OrderTransitionError) as context:
+            change_status(self.order, Order.Status.COMPLETED)
+        self.assertIn('нельзя перейти', str(context.exception))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+
+    def test_change_status_rejects_unknown_status(self):
+        with self.assertRaises(OrderTransitionError):
+            change_status(self.order, 'teleported')
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+
+    def test_cancel_returns_stock_and_coupon(self):
+        cancelled = cancel_order(self.order)
+        self.assertEqual(cancelled.status, Order.Status.CANCELLED)
+        self.product.refresh_from_db()
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.product.stock, 12)
+        self.assertEqual(self.coupon.used_count, 0)
+
+    def test_cancel_via_change_status_returns_stock(self):
+        change_status(self.order, Order.Status.CANCELLED)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 12)
+
+    def test_shipped_order_cannot_be_cancelled_by_service(self):
+        self.order.status = Order.Status.SHIPPED
+        self.order.save()
+        with self.assertRaises(OrderTransitionError):
+            cancel_order(self.order)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 10)
+
+
+class AdminOrderTransitionTests(TestCase):
+    """Кнопки статусов в карточке заказа и массовые действия в списке."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category, price=Decimal('100'), stock=10)
+        self.order = Order.objects.create(
+            customer_name='Олена', phone='+380671234567', city='Харків',
+            address='Сумська, 10', status=Order.Status.NEW,
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=3, price=Decimal('100.00'),
+        )
+        self.client.force_login(self.superuser)
+
+    def change_url(self):
+        return reverse('admin:shop_order_change', args=[self.order.pk])
+
+    def transition_url(self, status):
+        return reverse('admin:shop_order_transition', args=[self.order.pk, status])
+
+    def test_buttons_shown_for_new_order(self):
+        response = self.client.get(self.change_url())
+        self.assertEqual(response.status_code, 200)
+        buttons = response.context['transition_buttons']
+        self.assertEqual([button['code'] for button in buttons], ['confirmed', 'cancelled'])
+        self.assertContains(response, 'gzh-transition__button')
+        self.assertContains(response, 'Подтвердить')
+        self.assertContains(response, 'Отменить')
+
+    def test_buttons_for_shipped_order(self):
+        self.order.status = Order.Status.SHIPPED
+        self.order.save()
+        response = self.client.get(self.change_url())
+        buttons = response.context['transition_buttons']
+        self.assertEqual([button['code'] for button in buttons], ['completed'])
+
+    def test_no_buttons_for_completed_order(self):
+        self.order.status = Order.Status.COMPLETED
+        self.order.save()
+        response = self.client.get(self.change_url())
+        self.assertEqual(response.context['transition_buttons'], [])
+
+    def test_transition_view_changes_status(self):
+        response = self.client.post(self.transition_url('confirmed'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self.change_url())
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CONFIRMED)
+
+    def test_cancel_button_returns_stock(self):
+        self.client.post(self.transition_url('cancelled'))
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.product.stock, 13)
+
+    def test_invalid_transition_reports_error(self):
+        response = self.client.post(self.transition_url('completed'), follow=True)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+        self.assertContains(response, 'нельзя перейти')
+
+    def test_unknown_status_is_404(self):
+        response = self.client.post(
+            reverse('admin:shop_order_transition', args=[self.order.pk, 'teleported'])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_transition_requires_post(self):
+        response = self.client.get(self.transition_url('confirmed'))
+        self.assertEqual(response.status_code, 405)
+
+    def test_staff_without_change_permission_is_denied(self):
+        staff = self.User.objects.create_user(
+            username='viewer', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_order', content_type__app_label='shop'),
+        )
+        self.client.force_login(self.User.objects.get(pk=staff.pk))
+        response = self.client.post(self.transition_url('confirmed'))
+        self.assertEqual(response.status_code, 403)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+
+    def test_bulk_actions_are_listed_for_superuser(self):
+        response = self.client.get(reverse('admin:shop_order_changelist'))
+        actions = response.context['action_form'].fields['action'].choices
+        values = [value for value, _label in actions]
+        for name in ('mark_confirmed', 'mark_shipped', 'mark_completed', 'mark_cancelled'):
+            self.assertIn(name, values)
+
+    def test_bulk_confirm_action(self):
+        second = Order.objects.create(
+            customer_name='Іван', phone='+380501112233', city='Львів', address='Тест',
+        )
+        response = self.client.post(reverse('admin:shop_order_changelist'), {
+            'action': 'mark_confirmed',
+            'index': '0',
+            '_selected_action': [str(self.order.pk), str(second.pk)],
+        }, follow=True)
+        self.order.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CONFIRMED)
+        self.assertEqual(second.status, Order.Status.CONFIRMED)
+        self.assertContains(response, 'Статус «Подтверждён» установлен: 2')
+
+    def test_bulk_action_skips_impossible_transitions(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.save()
+        response = self.client.post(reverse('admin:shop_order_changelist'), {
+            'action': 'mark_shipped',
+            'index': '0',
+            '_selected_action': [str(self.order.pk)],
+        }, follow=True)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertContains(response, 'переход невозможен: 1')
+
+    def test_bulk_cancel_action_returns_stock(self):
+        self.client.post(reverse('admin:shop_order_changelist'), {
+            'action': 'mark_cancelled',
+            'index': '0',
+            '_selected_action': [str(self.order.pk)],
+        })
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.product.stock, 13)
+
+    def test_view_only_staff_does_not_see_status_actions(self):
+        staff = self.User.objects.create_user(
+            username='viewer', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_order', content_type__app_label='shop'),
+        )
+        self.client.force_login(self.User.objects.get(pk=staff.pk))
+        response = self.client.get(reverse('admin:shop_order_changelist'))
+        values = [value for value, _label in response.context['action_form'].fields['action'].choices]
+        self.assertNotIn('mark_confirmed', values)
+        self.assertIn('export_csv', values)
+
+
+class NewOrdersBadgeTests(TestCase):
+    """Счётчик новых заказов в шапке админки."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.product = make_product(self.category)
+        self.new_order = self.make_order(Order.Status.NEW)
+        self.other_order = self.make_order(Order.Status.SHIPPED)
+
+    def make_order(self, status):
+        return Order.objects.create(
+            customer_name='Олена', phone='+380671234567', city='Харків',
+            address='Сумська, 10', status=status,
+        )
+
+    def test_badge_counts_new_orders(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/')
+        self.assertEqual(response.context['new_orders_count'], 1)
+        self.assertContains(response, 'gzh-new-orders')
+        self.assertContains(response, '1 новый заказ')
+
+    def test_badge_link_filters_new_orders(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/')
+        expected = f"{reverse('admin:shop_order_changelist')}?status__exact=new"
+        self.assertContains(response, expected)
+
+    def test_badge_plural_forms(self):
+        self.make_order(Order.Status.NEW)
+        self.make_order(Order.Status.NEW)
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/')
+        self.assertEqual(response.context['new_orders_count'], 3)
+        self.assertContains(response, '3 новых заказа')
+
+    def test_badge_hidden_without_new_orders(self):
+        self.new_order.status = Order.Status.CONFIRMED
+        self.new_order.save()
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/')
+        self.assertEqual(response.context['new_orders_count'], 0)
+        self.assertNotContains(response, 'gzh-new-orders')
+
+    def test_badge_visible_on_every_admin_page(self):
+        self.client.force_login(self.superuser)
+        for url in ('/admin/', '/admin/shop/product/', '/admin/shop/order/', '/admin/auth/user/'):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200, url)
+            self.assertContains(response, 'gzh-new-orders', msg_prefix=url)
+
+    def test_badge_hidden_for_staff_without_order_permission(self):
+        staff = self.User.objects.create_user(
+            username='storekeeper', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_product', content_type__app_label='shop'),
+        )
+        self.client.force_login(self.User.objects.get(pk=staff.pk))
+        response = self.client.get('/admin/')
+        self.assertEqual(response.context['new_orders_count'], 0)
+        self.assertNotContains(response, 'gzh-new-orders')
+
+    def test_badge_visible_for_staff_with_view_permission(self):
+        staff = self.User.objects.create_user(
+            username='operator', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_order', content_type__app_label='shop'),
+        )
+        self.client.force_login(self.User.objects.get(pk=staff.pk))
+        response = self.client.get('/admin/shop/order/')
+        self.assertEqual(response.context['new_orders_count'], 1)

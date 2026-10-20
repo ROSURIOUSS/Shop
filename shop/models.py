@@ -301,9 +301,25 @@ class Order(models.Model):
             self.order_number = f'GZ-{timezone.now():%Y%m%d-%H%M%S}-{suffix}'
         super().save(*args, **kwargs)
 
+    STATUS_FLOW = {
+        'new': ('confirmed', 'cancelled'),
+        'confirmed': ('shipped', 'cancelled'),
+        'shipped': ('completed',),
+        'completed': (),
+        'cancelled': (),
+    }
+
+    def allowed_transitions(self):
+        """Коды статусов, в которые можно перевести заказ из текущего."""
+        return list(self.STATUS_FLOW.get(self.status, ()))
+
+    def can_move_to(self, code):
+        """Разрешён ли переход в указанный статус."""
+        return code in self.allowed_transitions()
+
     def can_be_cancelled(self):
         """Отменить заказ можно, пока он не отправлен на доставку."""
-        return self.status in (self.Status.NEW, self.Status.CONFIRMED)
+        return self.can_move_to(self.Status.CANCELLED)
 
     def status_timeline(self):
         """Шаги жизненного цикла заказа для личного кабинета."""

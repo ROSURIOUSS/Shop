@@ -39,6 +39,7 @@ from .models import (
     Review,
     with_rating,
 )
+from .orders import OrderTransitionError, cancel_order
 from .recommendations import bought_together
 
 SORT_OPTIONS = {
@@ -569,35 +570,18 @@ def order_detail(request, order_number):
 @require_POST
 def order_cancel(request, order_number):
     """Отменить свой заказ, пока он не отправлен, и вернуть товары на склад."""
-    with transaction.atomic():
-        order = get_object_or_404(
-            Order.objects.select_for_update(), order_number=order_number, user=request.user,
-        )
-        if not order.can_be_cancelled():
-            messages.error(
-                request,
-                'Заказ уже передан в доставку — отменить его можно только через поддержку.',
-            )
-            return redirect('shop:order_detail', order_number=order.order_number)
-
-        for item in order.items.select_related('product'):
-            product = Product.objects.select_for_update().get(pk=item.product_id)
-            product.stock += item.quantity
-            product.save(update_fields=['stock'])
-
-        order.status = Order.Status.CANCELLED
-        order.save(update_fields=['status', 'updated_at'])
-
-        if order.coupon_id:
-            Coupon.objects.filter(pk=order.coupon_id, used_count__gt=0).update(
-                used_count=F('used_count') - 1
-            )
+    order = get_object_or_404(Order, order_number=order_number, user=request.user)
+    try:
+        cancelled = cancel_order(order)
+    except OrderTransitionError as error:
+        messages.error(request, str(error))
+        return redirect('shop:order_detail', order_number=order.order_number)
 
     messages.success(
         request,
-        f'Заказ {order.order_number} отменён, товары вернулись на склад.',
+        f'Заказ {cancelled.order_number} отменён, товары вернулись на склад.',
     )
-    return redirect('shop:order_detail', order_number=order.order_number)
+    return redirect('shop:order_detail', order_number=cancelled.order_number)
 
 
 def _order_for_receipt(request, order_number):

@@ -1,5 +1,5 @@
 {% extends 'admin/base.html' %}
-{% load i18n static %}
+{% load i18n static shop_extras %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | GameZone{% endblock %}
 
@@ -39,6 +39,12 @@
 {% endblock %}
 
 {% block nav-global %}
+  {% if new_orders_count %}
+    <a class="gzh-new-orders" href="{{ new_orders_url }}" title="Заказы, ожидающие обработки">
+      {% icon 'package' 15 %}
+      {{ new_orders_count }} {{ new_orders_count|plural_ru:'новый заказ,новых заказа,новых заказов' }}
+    </a>
+  {% endif %}
   <a class="gzh-shop-link" href="{% url 'shop:home' %}" target="_blank" rel="noopener">
     Открыть магазин
   </a>

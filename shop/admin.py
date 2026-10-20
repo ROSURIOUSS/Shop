@@ -1,8 +1,13 @@
 """Настройка административной панели GameZone."""
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, HttpResponseNotAllowed, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
+from django.urls import path, reverse
 from django.utils.html import format_html
 
 from .csv_export import CsvExportMixin, export_flat_csv
+from .orders import OrderTransitionError, change_status
 from .models import (
     LOW_STOCK_THRESHOLD,
     Category,
@@ -207,6 +212,16 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
+    """Заказы: смена статуса кнопками в карточке и массовыми действиями."""
+
+    change_form_template = 'admin/shop/order/change_form.html'
+    TRANSITION_LABELS = {
+        'confirmed': 'Подтвердить',
+        'shipped': 'Отправить',
+        'completed': 'Завершить',
+        'cancelled': 'Отменить',
+    }
+
     list_display = (
         'order_number', 'user', 'customer_name', 'phone', 'ip_address',
         'status', 'total_amount', 'discount_amount', 'coupon', 'created_at',
@@ -238,7 +253,10 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
         ('items_summary', 'Состав заказа'),
         ('comment', 'Комментарий'),
     )
-    actions = ('export_csv', 'export_items_csv')
+    actions = (
+        'export_csv', 'export_items_csv',
+        'mark_confirmed', 'mark_shipped', 'mark_completed', 'mark_cancelled',
+    )
     fieldsets = (
         (None, {
             'fields': ('order_number', 'status', 'created_at', 'updated_at'),
@@ -253,6 +271,101 @@ class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    def get_urls(self):
+        """Адрес для смены статуса кнопкой из карточки заказа."""
+        custom = [
+            path(
+                '<path:object_id>/transition/<str:status>/',
+                self.admin_site.admin_view(self.transition_view),
+                name='shop_order_transition',
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        """Кнопки только для тех статусов, куда переход разрешён."""
+        extra_context = dict(extra_context or {})
+        if object_id:
+            order = self.get_object(request, object_id)
+            if order is not None:
+                extra_context['transition_buttons'] = [
+                    {
+                        'code': code,
+                        'label': self.TRANSITION_LABELS.get(
+                            code, Order.Status(code).label
+                        ),
+                        'url': reverse(
+                            'admin:shop_order_transition', args=[order.pk, code]
+                        ),
+                    }
+                    for code in order.allowed_transitions()
+                ]
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def transition_view(self, request, object_id, status):
+        """Сменить статус заказа по POST-запросу из карточки."""
+        order = get_object_or_404(Order, pk=object_id)
+        if not self.has_change_permission(request, order):
+            raise PermissionDenied
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+        if status not in Order.Status.values:
+            raise Http404('Неизвестный статус заказа')
+
+        try:
+            change_status(order, status)
+        except OrderTransitionError as error:
+            self.message_user(request, str(error), messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f'Заказ {order.order_number}: «{Order.Status(status).label}».',
+                messages.SUCCESS,
+            )
+        return HttpResponseRedirect(
+            reverse('admin:shop_order_change', args=[order.pk])
+        )
+
+    def _bulk_transition(self, request, queryset, status):
+        """Сменить статус у выбранных заказов, пропуская недопустимые переходы."""
+        changed = 0
+        skipped = 0
+        for order in queryset:
+            try:
+                change_status(order, status)
+            except OrderTransitionError:
+                skipped += 1
+            else:
+                changed += 1
+
+        label = Order.Status(status).label
+        if changed:
+            self.message_user(
+                request, f'Статус «{label}» установлен: {changed}.', messages.SUCCESS
+            )
+        if skipped:
+            self.message_user(
+                request,
+                f'Пропущено заказов, где переход невозможен: {skipped}.',
+                messages.WARNING,
+            )
+
+    @admin.action(permissions=['change'], description='Подтвердить выбранные заказы')
+    def mark_confirmed(self, request, queryset):
+        self._bulk_transition(request, queryset, Order.Status.CONFIRMED)
+
+    @admin.action(permissions=['change'], description='Отправить выбранные заказы')
+    def mark_shipped(self, request, queryset):
+        self._bulk_transition(request, queryset, Order.Status.SHIPPED)
+
+    @admin.action(permissions=['change'], description='Завершить выбранные заказы')
+    def mark_completed(self, request, queryset):
+        self._bulk_transition(request, queryset, Order.Status.COMPLETED)
+
+    @admin.action(permissions=['change'], description='Отменить выбранные заказы')
+    def mark_cancelled(self, request, queryset):
+        self._bulk_transition(request, queryset, Order.Status.CANCELLED)
 
     @admin.action(description='Выгрузить позиции заказов в CSV')
     def export_items_csv(self, request, queryset):
