@@ -11,6 +11,15 @@
     <h3 class="product-card__title">
       <a href="{{ product.get_absolute_url }}">{{ product.name }}</a>
     </h3>
+    {% if product.rating_count %}
+      <div class="product-card__rating">
+        {% include 'shop/includes/rating_stars.html' with value=product.rating_avg %}
+        <span class="product-card__rating-note">
+          {{ product.rating_avg|floatformat:1 }} ·
+          {{ product.rating_count }} {{ product.rating_count|plural_ru:'отзыв,отзыва,отзывов' }}
+        </span>
+      </div>
+    {% endif %}
     <div class="product-card__meta">
       <span class="price">{{ product.price|money }}</span>
       {% if product.in_stock %}

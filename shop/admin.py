@@ -1,7 +1,20 @@
 """Настройка административной панели GameZone."""
 from django.contrib import admin
+from django.utils.html import format_html
 
-from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
+from .csv_export import CsvExportMixin, export_flat_csv
+from .models import (
+    LOW_STOCK_THRESHOLD,
+    Category,
+    ContactMessage,
+    Order,
+    OrderItem,
+    Product,
+    Profile,
+    Review,
+    with_rating,
+)
+from .templatetags.shop_extras import plural_ru
 
 
 @admin.register(Category)
@@ -11,15 +24,73 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
+class StockStatusFilter(admin.SimpleListFilter):
+    """Фильтр товаров по остатку на складе."""
+
+    title = 'остаток на складе'
+    parameter_name = 'stock_status'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('low', f'Заканчиваются (не больше {LOW_STOCK_THRESHOLD} шт.)'),
+            ('ok', 'Достаточно на складе'),
+            ('out', 'Нет в наличии'),
+            ('off', 'Сняты с продажи'),
+        )
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'low':
+            return queryset.filter(
+                is_available=True, stock__gt=0, stock__lte=LOW_STOCK_THRESHOLD
+            )
+        if value == 'ok':
+            return queryset.filter(is_available=True, stock__gt=LOW_STOCK_THRESHOLD)
+        if value == 'out':
+            return queryset.filter(is_available=True, stock=0)
+        if value == 'off':
+            return queryset.filter(is_available=False)
+        return queryset
+
+
+class ReviewInline(admin.TabularInline):
+    """Отзывы прямо в карточке товара."""
+
+    model = Review
+    extra = 0
+    fields = ('user', 'rating', 'text', 'is_visible', 'created_at')
+    readonly_fields = ('created_at',)
+    autocomplete_fields = ('user',)
+    verbose_name = 'отзыв'
+    verbose_name_plural = 'Отзывы покупателей'
+
+
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'stock', 'is_available', 'is_featured', 'created_at')
-    list_filter = ('category', 'is_available', 'is_featured')
+class ProductAdmin(CsvExportMixin, admin.ModelAdmin):
+    list_display = (
+        'name', 'category', 'price', 'stock_status', 'stock', 'rating_summary',
+        'is_available', 'is_featured', 'created_at',
+    )
+    list_filter = (StockStatusFilter, 'category', 'is_available', 'is_featured')
     search_fields = ('name', 'description')
     list_editable = ('price', 'stock', 'is_available', 'is_featured')
     ordering = ('-created_at',)
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ('category',)
+    inlines = [ReviewInline]
+    actions = ('export_csv',)
+    csv_basename = 'products'
+    csv_fields = (
+        ('name', 'Товар'),
+        ('category__name', 'Категория'),
+        ('price', 'Цена, ₴'),
+        ('stock', 'Остаток, шт.'),
+        ('is_available', 'В продаже'),
+        ('is_featured', 'Популярный'),
+        ('rating_average', 'Средняя оценка'),
+        ('rating_count', 'Отзывов'),
+        ('created_at', 'Добавлен'),
+    )
     fieldsets = (
         (None, {
             'fields': ('category', 'name', 'slug', 'description', 'price', 'image')
@@ -33,6 +104,46 @@ class ProductAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_queryset(self, request):
+        return with_rating(super().get_queryset(request))
+
+    @admin.display(description='Наличие', ordering='stock')
+    def stock_status(self, obj):
+        """Цветная метка остатка: заканчивается, нет в наличии, достаточно."""
+        if not obj.is_available:
+            label, style = 'Снят с продажи', 'off'
+        elif obj.stock == 0:
+            label, style = 'Нет в наличии', 'out'
+        elif obj.is_low_stock:
+            label, style = 'Заканчивается', 'low'
+        else:
+            label, style = 'Достаточно', 'ok'
+        return format_html(
+            '<span class="gzh-stock gzh-stock--{}">{}</span>', style, label
+        )
+
+    @admin.display(description='Рейтинг', ordering='rating_avg')
+    def rating_summary(self, obj):
+        average = getattr(obj, 'rating_avg', None)
+        count = getattr(obj, 'rating_count', None)
+        if not count:
+            return format_html('<span class="gzh-muted">{}</span>', 'нет отзывов')
+        value = f'{float(average or 0):.1f}'.replace('.', ',')
+        return format_html(
+            '<span class="gzh-rating">{} <small>({} {})</small></span>',
+            value,
+            count,
+            plural_ru(count, 'отзыв,отзыва,отзывов'),
+        )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        note = f'Товар считается заканчивающимся при остатке {LOW_STOCK_THRESHOLD} шт. и меньше.'
+        if obj is not None and obj.is_low_stock:
+            note = f'Остаток {obj.stock} шт. — товар заканчивается. ' + note
+        form.base_fields['stock'].help_text = note
+        return form
+
 
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
@@ -42,31 +153,162 @@ class OrderItemInline(admin.TabularInline):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'user', 'customer_name', 'phone', 'ip_address', 'status', 'total_amount', 'created_at')
+class OrderAdmin(CsvExportMixin, admin.ModelAdmin):
+    list_display = (
+        'order_number', 'user', 'customer_name', 'phone', 'ip_address',
+        'status', 'total_amount', 'created_at',
+    )
     list_filter = ('status', 'created_at')
     search_fields = ('order_number', 'customer_name', 'phone', 'email', 'ip_address', 'user__username')
     autocomplete_fields = ('user',)
-    readonly_fields = ('order_number', 'total_amount', 'created_at', 'updated_at')
+    readonly_fields = ('order_number', 'total_amount', 'items_summary', 'created_at', 'updated_at')
     inlines = [OrderItemInline]
     ordering = ('-created_at',)
+    csv_basename = 'orders'
+    csv_fields = (
+        ('order_number', 'Номер заказа'),
+        ('created_at', 'Дата'),
+        ('get_status_display', 'Статус'),
+        ('customer_name', 'Покупатель'),
+        ('phone', 'Телефон'),
+        ('email', 'Email'),
+        ('city', 'Город'),
+        ('address', 'Адрес доставки'),
+        ('user__username', 'Аккаунт'),
+        ('ip_address', 'IP-адрес'),
+        ('total_amount', 'Сумма, ₴'),
+        ('items_summary', 'Состав заказа'),
+        ('comment', 'Комментарий'),
+    )
+    actions = ('export_csv', 'export_items_csv')
+    fieldsets = (
+        (None, {
+            'fields': ('order_number', 'status', 'created_at', 'updated_at'),
+        }),
+        ('Покупатель и доставка', {
+            'fields': ('user', 'customer_name', 'phone', 'email', 'city', 'address', 'ip_address'),
+        }),
+        ('Состав и сумма', {
+            'fields': ('items_summary', 'total_amount', 'comment'),
+        }),
+    )
 
     def has_add_permission(self, request):
         return False
 
+    @admin.action(description='Выгрузить позиции заказов в CSV')
+    def export_items_csv(self, request, queryset):
+        """Плоская выгрузка: одна строка — одна позиция заказа."""
+        headers = [
+            'Номер заказа', 'Дата', 'Статус', 'Покупатель', 'Телефон', 'Email',
+            'Город', 'Товар', 'Категория', 'Количество', 'Цена, ₴', 'Сумма, ₴',
+        ]
+
+        def rows():
+            orders = queryset.select_related('user').prefetch_related(
+                'items__product__category'
+            )
+            for order in orders:
+                for item in order.items.all():
+                    yield [
+                        order.order_number,
+                        order.created_at,
+                        order.get_status_display(),
+                        order.customer_name,
+                        order.phone,
+                        order.email,
+                        order.city,
+                        item.product.name,
+                        item.product.category.name,
+                        item.quantity,
+                        item.price,
+                        item.get_cost(),
+                    ]
+
+        return export_flat_csv('order-items', headers, rows())
+
+
+@admin.register(Review)
+class ReviewAdmin(CsvExportMixin, admin.ModelAdmin):
+    list_display = ('product', 'author', 'rating', 'is_visible', 'created_at')
+    list_display_links = ('product',)
+    list_filter = ('rating', 'is_visible', 'created_at')
+    search_fields = ('product__name', 'user__username', 'user__email', 'text')
+    list_editable = ('is_visible',)
+    autocomplete_fields = ('product', 'user')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at')
+    csv_basename = 'reviews'
+    csv_fields = (
+        ('product__name', 'Товар'),
+        ('author_name', 'Автор'),
+        ('user__username', 'Аккаунт'),
+        ('user__email', 'Email'),
+        ('rating', 'Оценка'),
+        ('text', 'Текст отзыва'),
+        ('is_visible', 'Показан на сайте'),
+        ('created_at', 'Дата'),
+    )
+    actions = ('export_csv', 'make_visible', 'make_hidden')
+    fieldsets = (
+        (None, {
+            'fields': ('product', 'user', 'rating', 'text', 'is_visible'),
+        }),
+        ('Служебное', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    @admin.display(description='Автор', ordering='user__username')
+    def author(self, obj):
+        return obj.author_name
+
+    @admin.action(description='Показать на сайте')
+    def make_visible(self, request, queryset):
+        updated = queryset.update(is_visible=True)
+        self.message_user(request, f'Отзывы, показанные на сайте: {updated}.')
+
+    @admin.action(description='Скрыть с сайта')
+    def make_hidden(self, request, queryset):
+        updated = queryset.update(is_visible=False)
+        self.message_user(request, f'Скрытые отзывы: {updated}.')
+
 
 @admin.register(ContactMessage)
-class ContactMessageAdmin(admin.ModelAdmin):
+class ContactMessageAdmin(CsvExportMixin, admin.ModelAdmin):
     list_display = ('name', 'email', 'subject', 'created_at')
     search_fields = ('name', 'email', 'subject')
     readonly_fields = ('name', 'email', 'subject', 'message', 'created_at')
+    actions = ('export_csv',)
+    csv_basename = 'messages'
+    csv_fields = (
+        ('name', 'Имя'),
+        ('email', 'Email'),
+        ('subject', 'Тема'),
+        ('message', 'Сообщение'),
+        ('created_at', 'Дата отправки'),
+    )
 
     def has_add_permission(self, request):
         return False
 
 
 @admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
+class ProfileAdmin(CsvExportMixin, admin.ModelAdmin):
     list_display = ('user', 'phone', 'city')
     search_fields = ('user__username', 'user__email', 'phone', 'city')
     autocomplete_fields = ('user',)
+    actions = ('export_csv',)
+    csv_basename = 'profiles'
+    csv_fields = (
+        ('user__username', 'Аккаунт'),
+        ('user__email', 'Email'),
+        ('user__first_name', 'Имя'),
+        ('user__last_name', 'Фамилия'),
+        ('user__date_joined', 'Дата регистрации'),
+        ('phone', 'Телефон'),
+        ('city', 'Город'),
+        ('address', 'Адрес доставки'),
+    )

@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Avg, Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -23,14 +23,25 @@ from .forms import (
     PasswordChangeForm,
     ProfileForm,
     RegisterForm,
+    ReviewForm,
     UserForm,
 )
-from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
+from .models import (
+    Category,
+    ContactMessage,
+    Order,
+    OrderItem,
+    Product,
+    Profile,
+    Review,
+    with_rating,
+)
 
 SORT_OPTIONS = {
     'popular': ('По популярности', ('-is_featured', '-created_at')),
     'price_asc': ('Сначала дешёвые', ('price',)),
     'price_desc': ('Сначала дорогие', ('-price',)),
+    'rating': ('По рейтингу', (F('rating_avg').desc(nulls_last=True),)),
     'name': ('По названию А — Я', ('name',)),
     'new': ('Сначала новые', ('-created_at',)),
 }
@@ -52,6 +63,16 @@ def _get_profile(user):
     """
     profile, _created = Profile.objects.get_or_create(user=user)
     return profile
+
+
+def _has_purchased(user, product):
+    """Покупал ли пользователь этот товар (отменённые заказы не считаются)."""
+    if not user.is_authenticated:
+        return False
+    return OrderItem.objects.filter(
+        product=product,
+        order__user=user,
+    ).exclude(order__status=Order.Status.CANCELLED).exists()
 
 
 def _parse_price(value):
@@ -93,7 +114,7 @@ def _filter_products(request, queryset):
     if max_price is not None and min_price is not None and max_price < min_price:
         queryset = queryset.none()
 
-    queryset = queryset.order_by(*SORT_OPTIONS[sort_key][1], 'id')
+    queryset = with_rating(queryset).order_by(*SORT_OPTIONS[sort_key][1], 'id')
 
     filters = {
         'q': query,
@@ -122,17 +143,19 @@ def _querystring_without_page(request):
 def home(request):
     """Главная страница: hero, категории, популярное, новинки, преимущества."""
     categories = Category.objects.all()[:6]
-    featured_products = Product.objects.filter(
-        is_featured=True, is_available=True
-    ).select_related('category')[:4]
+    featured_products = with_rating(
+        Product.objects.filter(is_featured=True, is_available=True)
+        .select_related('category')
+    ).order_by('-created_at')[:4]
 
     featured_ids = [product.pk for product in featured_products]
-    new_products = Product.objects.filter(is_available=True).exclude(
-        id__in=featured_ids
-    ).select_related('category').order_by('-created_at')[:4]
+    new_products = with_rating(
+        Product.objects.filter(is_available=True).exclude(id__in=featured_ids)
+        .select_related('category')
+    ).order_by('-created_at')[:4]
     if not new_products:
-        new_products = Product.objects.filter(is_available=True).select_related(
-            'category'
+        new_products = with_rating(
+            Product.objects.filter(is_available=True).select_related('category')
         ).order_by('-created_at')[:4]
 
     return render(request, 'shop/home.html', {
@@ -189,17 +212,74 @@ def category_detail(request, slug):
     })
 
 
-def product_detail(request, pk):
-    """Карточка товара: изображение, характеристики, похожие товары."""
-    product = get_object_or_404(Product.objects.select_related('category'), pk=pk)
-    related_products = Product.objects.filter(
-        category=product.category, is_available=True
-    ).exclude(pk=product.pk).select_related('category')[:4]
+def _product_detail_context(request, product, review_form=None):
+    """Общий контекст карточки товара: рейтинги, отзывы, похожие товары."""
+    related_products = with_rating(
+        Product.objects.filter(category=product.category, is_available=True)
+        .exclude(pk=product.pk).select_related('category')
+    ).order_by('-created_at')[:4]
 
-    return render(request, 'shop/product_detail.html', {
+    reviews = product.reviews.filter(is_visible=True).select_related('user')
+    stats = reviews.aggregate(avg=Avg('rating'), count=Count('id'))
+    own_review = None
+    if request.user.is_authenticated:
+        own_review = product.reviews.filter(user=request.user).first()
+
+    if review_form is None:
+        review_form = ReviewForm(instance=own_review)
+
+    return {
         'product': product,
         'related_products': related_products,
-    })
+        'reviews': reviews,
+        'rating_avg': None if stats['avg'] is None else round(Decimal(stats['avg']), 1),
+        'rating_count': stats['count'],
+        'own_review': own_review,
+        'review_form': review_form,
+        'can_review': _has_purchased(request.user, product),
+    }
+
+
+def product_detail(request, pk):
+    """Карточка товара: изображение, характеристики, отзывы, похожие товары."""
+    product = get_object_or_404(Product.objects.select_related('category'), pk=pk)
+    return render(
+        request, 'shop/product_detail.html', _product_detail_context(request, product)
+    )
+
+
+@login_required
+@require_POST
+def review_add(request, pk):
+    """Оставить или обновить отзыв. Доступно только покупателям товара."""
+    product = get_object_or_404(Product.objects.select_related('category'), pk=pk)
+    back = product.get_absolute_url() + '#reviews'
+
+    if not _has_purchased(request.user, product):
+        messages.error(
+            request,
+            'Отзыв могут оставить покупатели, которые заказывали этот товар.',
+        )
+        return redirect(back)
+
+    own_review = Review.objects.filter(product=product, user=request.user).first()
+    form = ReviewForm(request.POST, instance=own_review)
+    if not form.is_valid():
+        messages.error(request, _first_form_error(form) or 'Проверьте данные отзыва.')
+        return render(
+            request, 'shop/product_detail.html',
+            _product_detail_context(request, product, review_form=form),
+        )
+
+    review = form.save(commit=False)
+    review.product = product
+    review.user = request.user
+    review.save()
+    messages.success(
+        request,
+        'Отзыв обновлён — спасибо!' if own_review else 'Отзыв опубликован — спасибо!',
+    )
+    return redirect(back)
 
 
 def cart_detail(request):

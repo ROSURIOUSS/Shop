@@ -1,14 +1,17 @@
 """Админ-панель журнала активности: отдельный раздел «Активность и IP-адреса»."""
 from django.contrib import admin
 
+from shop.csv_export import CsvExportMixin
+
 from .models import AuthEvent, VisitLog
 
 
-class ReadOnlyLogAdmin(admin.ModelAdmin):
+class ReadOnlyLogAdmin(CsvExportMixin, admin.ModelAdmin):
     """Общая база для журналов: записи создаются сайтом, а не вручную."""
 
     view_on_site = False
     list_per_page = 50
+    actions = ('export_csv',)
 
     def has_add_permission(self, request):
         return False
@@ -45,6 +48,20 @@ class VisitLogAdmin(ReadOnlyLogAdmin):
         }),
     )
 
+    csv_basename = 'visits'
+    csv_fields = (
+        ('created_at', 'Дата и время'),
+        ('ip_address', 'IP-адрес'),
+        ('user__username', 'Аккаунт'),
+        ('path', 'Страница'),
+        ('method', 'Метод'),
+        ('status_code', 'Код ответа'),
+        ('browser', 'Браузер'),
+        ('os', 'Система'),
+        ('referer', 'Источник перехода'),
+        ('user_agent', 'User-Agent'),
+    )
+
     @admin.display(description='Страница', ordering='path')
     def short_path(self, obj):
         return obj.path if len(obj.path) <= 60 else obj.path[:57] + '…'
@@ -73,4 +90,17 @@ class AuthEventAdmin(ReadOnlyLogAdmin):
         ('Покупатель', {
             'fields': ('user', 'username', 'ip_address', 'browser', 'os', 'user_agent'),
         }),
+    )
+    csv_basename = 'auth-events'
+    csv_fields = (
+        ('created_at', 'Дата и время'),
+        ('get_action_display', 'Событие'),
+        ('success', 'Успешно'),
+        ('username', 'Логин из формы'),
+        ('user__username', 'Аккаунт'),
+        ('ip_address', 'IP-адрес'),
+        ('browser', 'Браузер'),
+        ('os', 'Система'),
+        ('detail', 'Подробности'),
+        ('user_agent', 'User-Agent'),
     )

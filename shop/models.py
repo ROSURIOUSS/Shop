@@ -4,11 +4,29 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.templatetags.static import static
+
+
+LOW_STOCK_THRESHOLD = 5
+
+REVIEW_TEXT_LIMIT = 2000
+
+
+def with_rating(queryset):
+    """Добавить к набору товаров средний рейтинг и число отзывов.
+
+    Агрегаты считаются одним запросом, чтобы списки товаров не делали
+    по два обращения к базе на каждую карточку.
+    """
+    visible = models.Q(reviews__is_visible=True)
+    return queryset.annotate(
+        rating_avg=models.Avg('reviews__rating', filter=visible),
+        rating_count=models.Count('reviews__id', filter=visible),
+    )
 
 
 class Category(models.Model):
@@ -99,6 +117,24 @@ class Product(models.Model):
             return []
         return list(self.specifications.items())
 
+    @property
+    def is_low_stock(self):
+        """Товар заканчивается: он доступен, но остаток не выше порога."""
+        return self.is_available and 0 < self.stock <= LOW_STOCK_THRESHOLD
+
+    def rating_average(self):
+        """Средняя оценка по видимым отзывам или None, если отзывов нет."""
+        average = self.reviews.filter(is_visible=True).aggregate(
+            value=models.Avg('rating')
+        )['value']
+        if average is None:
+            return None
+        return round(Decimal(average), 1)
+
+    def rating_count(self):
+        """Количество видимых отзывов."""
+        return self.reviews.filter(is_visible=True).count()
+
 
 class Profile(models.Model):
     """Профиль покупателя: контактные данные и адрес доставки по умолчанию."""
@@ -175,6 +211,13 @@ class Order(models.Model):
             self.order_number = f'GZ-{timezone.now():%Y%m%d-%H%M%S}-{suffix}'
         super().save(*args, **kwargs)
 
+    def items_summary(self):
+        """Позиции заказа одной строкой — для выгрузок и списка заказов."""
+        return '; '.join(
+            f'{item.product.name} × {item.quantity}'
+            for item in self.items.select_related('product')
+        )
+
     def get_total_cost(self):
         """Общая стоимость заказа, вычисленная из его позиций."""
         total = self.items.aggregate(
@@ -228,3 +271,62 @@ class ContactMessage(models.Model):
 
     def __str__(self):
         return f'{self.name} — {self.subject}'
+
+
+class Review(models.Model):
+    """Отзыв покупателя о товаре.
+
+    Отзыв оставляет только тот, кто заказывал этот товар: покупка проверяется
+    по позициям незакрытых отменой заказов, поэтому на сайте нет выдуманных оценок.
+    """
+
+    RATING_CHOICES = tuple((value, str(value)) for value in range(1, 6))
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='reviews',
+        verbose_name='товар',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='reviews',
+        verbose_name='автор',
+    )
+    rating = models.PositiveSmallIntegerField(
+        'оценка от 1 до 5',
+        choices=RATING_CHOICES,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    text = models.TextField(
+        'текст отзыва',
+        blank=True,
+        validators=[MaxLengthValidator(REVIEW_TEXT_LIMIT)],
+    )
+    is_visible = models.BooleanField('показывать на сайте', default=True)
+    created_at = models.DateTimeField('дата публикации', auto_now_add=True)
+    updated_at = models.DateTimeField('дата изменения', auto_now=True)
+
+    class Meta:
+        verbose_name = 'отзыв'
+        verbose_name_plural = 'Отзывы'
+        ordering = ['-created_at', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product', 'user'],
+                name='unique_review_per_product_and_user',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['product', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.product.name} — {self.rating}/5 от {self.author_name}'
+
+    @property
+    def author_name(self):
+        """Имя автора для витрины: имя и фамилия или логин."""
+        full_name = f'{self.user.first_name} {self.user.last_name}'.strip()
+        return full_name or self.user.username

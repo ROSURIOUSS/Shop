@@ -12,9 +12,7 @@ from django.utils import timezone
 
 from activity.models import AuthEvent, VisitLog
 
-from .models import Category, ContactMessage, Order, OrderItem, Product
-
-LOW_STOCK_THRESHOLD = 5
+from .models import LOW_STOCK_THRESHOLD, Category, ContactMessage, Order, OrderItem, Product
 TOP_PRODUCTS_LIMIT = 5
 RECENT_LIMIT = 5
 MONEY = Decimal('0.01')
@@ -112,7 +110,7 @@ def _stock():
     """Состояние витрины и товары, которые заканчиваются."""
     low = (
         Product.objects
-        .filter(is_available=True, stock__lte=LOW_STOCK_THRESHOLD)
+        .filter(is_available=True, stock__gt=0, stock__lte=LOW_STOCK_THRESHOLD)
         .order_by('stock', 'name')[:RECENT_LIMIT * 2]
     )
     return {

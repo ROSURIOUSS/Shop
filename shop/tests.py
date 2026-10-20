@@ -1,4 +1,5 @@
 """Тесты моделей, корзины, оформления заказа, аккаунтов и резервных копий."""
+import csv
 import json
 import os
 import re
@@ -11,7 +12,9 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.db import IntegrityError, transaction
 from django.db.utils import OperationalError
+from django.contrib.messages import get_messages
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
@@ -22,7 +25,19 @@ from gamezone.db_url import normalize as normalize_database_url
 from gamezone.db_url import validate as validate_database_url
 
 from .cart import Cart
-from .models import Category, ContactMessage, Order, OrderItem, Product, Profile
+from .dashboard import LOW_STOCK_THRESHOLD as DASHBOARD_LOW_STOCK_THRESHOLD
+from .models import (
+    LOW_STOCK_THRESHOLD,
+    Category,
+    ContactMessage,
+    Order,
+    OrderItem,
+    Product,
+    Profile,
+    Review,
+    with_rating,
+)
+from .templatetags.shop_extras import plural_ru
 
 
 def make_category(**kwargs):
@@ -1000,3 +1015,426 @@ class AdminThemeTests(TestCase):
         head = css.split('{', 1)[0]
         for selector in (':root', 'html[data-theme="light"]', 'html[data-theme="dark"]', 'html[data-theme="auto"]'):
             self.assertIn(selector, head)
+
+
+class ReviewTests(TestCase):
+    """Отзывы и рейтинги: пишут только покупатели, цифры считаются по базе."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.category = make_category()
+        self.product = make_product(self.category, stock=10)
+        self.other = make_product(
+            self.category, name='Test Keyboard', slug='test-keyboard',
+            price=Decimal('1999.00'), stock=20,
+        )
+        self.third = make_product(
+            self.category, name='Test Headset', slug='test-headset',
+            price=Decimal('2999.00'), stock=20,
+        )
+        self.buyer = self.User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='secret-pass-2026',
+        )
+        self.stranger = self.User.objects.create_user(
+            username='stranger', email='stranger@example.com', password='secret-pass-2026',
+        )
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+
+    def buy(self, user, product, status=Order.Status.NEW):
+        order = Order.objects.create(
+            user=user, customer_name='Іван Петренко', phone='+380501112233',
+            email='ivan@example.com', city='Харків', address='вул. Тестова, 1',
+            status=status, total_amount=product.price,
+        )
+        OrderItem.objects.create(
+            order=order, product=product, quantity=1, price=product.price,
+        )
+        return order
+
+    def post_review(self, rating='5', text='Дуже зручна миша', user=None):
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.post(
+            reverse('shop:review_add', args=[self.product.pk]),
+            {'rating': rating, 'text': text},
+        )
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.post_review()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('shop:login'), response.url)
+        self.assertEqual(Review.objects.count(), 0)
+
+    def test_review_requires_purchase(self):
+        response = self.post_review(user=self.stranger)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Review.objects.count(), 0)
+        texts = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertTrue(any('заказывали этот товар' in t for t in texts), texts)
+
+    def test_cancelled_order_does_not_allow_review(self):
+        self.buy(self.buyer, self.product, status=Order.Status.CANCELLED)
+        self.post_review(user=self.buyer)
+        self.assertEqual(Review.objects.count(), 0)
+
+    def test_buyer_creates_review(self):
+        self.buy(self.buyer, self.product)
+        response = self.post_review(user=self.buyer)
+        self.assertEqual(response.status_code, 302)
+        review = Review.objects.get()
+        self.assertEqual(review.product, self.product)
+        self.assertEqual(review.user, self.buyer)
+        self.assertEqual(review.rating, 5)
+        self.assertEqual(review.text, 'Дуже зручна миша')
+        self.assertTrue(review.is_visible)
+
+    def test_second_post_updates_own_review(self):
+        self.buy(self.buyer, self.product)
+        self.post_review(user=self.buyer)
+        self.post_review(rating='3', text='Гірше, ніж очікував', user=self.buyer)
+        self.assertEqual(Review.objects.count(), 1)
+        review = Review.objects.get()
+        self.assertEqual(review.rating, 3)
+        self.assertEqual(review.text, 'Гірше, ніж очікував')
+
+    def test_review_of_another_user_is_not_touched(self):
+        self.buy(self.buyer, self.product)
+        self.buy(self.stranger, self.product)
+        self.post_review(user=self.buyer)
+        self.post_review(rating='2', text='Не зайшла', user=self.stranger)
+        self.assertEqual(Review.objects.count(), 2)
+        self.assertEqual(Review.objects.get(user=self.buyer).rating, 5)
+        self.assertEqual(Review.objects.get(user=self.stranger).rating, 2)
+
+    def test_invalid_rating_is_rejected(self):
+        self.buy(self.buyer, self.product)
+        for rating in ('6', '0', '', 'abc'):
+            self.post_review(rating=rating, user=self.buyer)
+            self.assertEqual(Review.objects.count(), 0, f'оценка {rating!r} прошла')
+
+    def test_whitespace_text_is_stripped(self):
+        self.buy(self.buyer, self.product)
+        self.post_review(text='   \n  ', user=self.buyer)
+        self.assertEqual(Review.objects.get().text, '')
+
+    def test_get_request_is_not_allowed(self):
+        self.buy(self.buyer, self.product)
+        self.client.force_login(self.buyer)
+        response = self.client.get(reverse('shop:review_add', args=[self.product.pk]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_one_review_per_product_per_user(self):
+        self.buy(self.buyer, self.product)
+        Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Review.objects.create(product=self.product, user=self.buyer, rating=4)
+
+    def test_rating_average_counts_visible_reviews_only(self):
+        Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        Review.objects.create(product=self.product, user=self.stranger, rating=3)
+        hidden = Review.objects.create(
+            product=self.product, user=self.superuser, rating=1, is_visible=False,
+        )
+        self.assertEqual(self.product.rating_average(), Decimal('4.0'))
+        self.assertEqual(self.product.rating_count(), 2)
+        hidden.is_visible = True
+        hidden.save()
+        self.assertEqual(self.product.rating_average(), Decimal('3.0'))
+        self.assertEqual(self.product.rating_count(), 3)
+
+    def test_product_page_shows_reviews(self):
+        self.buy(self.buyer, self.product)
+        Review.objects.create(
+            product=self.product, user=self.buyer, rating=4, text='Тримає руку добре',
+        )
+        response = self.client.get(self.product.get_absolute_url())
+        self.assertContains(response, 'Отзывы покупателей')
+        self.assertContains(response, 'Тримає руку добре')
+        self.assertContains(response, 'buyer')
+        self.assertContains(response, 'class="stars"')
+        self.assertContains(response, '4,0')
+
+    def test_hidden_review_is_not_shown(self):
+        Review.objects.create(
+            product=self.product, user=self.buyer, rating=5,
+            text='Секретний текст', is_visible=False,
+        )
+        response = self.client.get(self.product.get_absolute_url())
+        self.assertNotContains(response, 'Секретний текст')
+        self.assertContains(response, 'Отзывов пока нет')
+
+    def test_product_without_reviews_shows_empty_state(self):
+        response = self.client.get(self.product.get_absolute_url())
+        self.assertContains(response, 'Отзывов пока нет')
+        self.assertContains(response, 'Войдите')
+
+    def test_buyer_sees_review_form(self):
+        self.buy(self.buyer, self.product)
+        self.client.force_login(self.buyer)
+        response = self.client.get(self.product.get_absolute_url())
+        self.assertContains(response, 'Оставить отзыв')
+        self.assertContains(response, reverse('shop:review_add', args=[self.product.pk]))
+
+    def test_catalog_shows_rating(self):
+        Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        response = self.client.get(reverse('shop:catalog'))
+        self.assertContains(response, 'class="stars"')
+        self.assertContains(response, '5,0')
+        self.assertContains(response, '1 отзыв')
+
+    def test_sorting_by_rating(self):
+        Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        Review.objects.create(product=self.other, user=self.stranger, rating=3)
+        response = self.client.get(reverse('shop:catalog'), {'sort': 'rating'})
+        names = [p.name for p in response.context['products']]
+        self.assertEqual(names, ['Test Mouse', 'Test Keyboard', 'Test Headset'])
+
+    def test_rating_is_available_in_annotated_queryset(self):
+        Review.objects.create(product=self.product, user=self.buyer, rating=4)
+        annotated = with_rating(Product.objects.all()).get(pk=self.product.pk)
+        self.assertEqual(float(annotated.rating_avg), 4.0)
+        self.assertEqual(annotated.rating_count, 1)
+
+    def test_plural_ru_filter(self):
+        cases = {
+            0: 'отзывов', 1: 'отзыв', 2: 'отзыва', 4: 'отзыва', 5: 'отзывов',
+            11: 'отзывов', 12: 'отзывов', 21: 'отзыв', 22: 'отзыва',
+            25: 'отзывов', 100: 'отзывов', 101: 'отзыв', 111: 'отзывов',
+        }
+        for number, expected in cases.items():
+            self.assertEqual(plural_ru(number, 'отзыв,отзыва,отзывов'), expected, number)
+
+    def test_admin_review_list_requires_staff(self):
+        response = self.client.get('/admin/shop/review/')
+        self.assertEqual(response.status_code, 302)
+        self.client.force_login(self.buyer)
+        response = self.client.get('/admin/shop/review/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_admin_can_hide_reviews(self):
+        review = Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        self.client.force_login(self.superuser)
+        response = self.client.post('/admin/shop/review/', {
+            'action': 'make_hidden',
+            'index': '0',
+            '_selected_action': [str(review.pk)],
+        })
+        self.assertEqual(response.status_code, 302)
+        review.refresh_from_db()
+        self.assertFalse(review.is_visible)
+
+    def test_admin_changelist_shows_rating(self):
+        Review.objects.create(product=self.product, user=self.buyer, rating=5)
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/shop/product/')
+        self.assertContains(response, 'gzh-rating')
+        self.assertContains(response, '5,0')
+
+
+class CsvExportTests(TestCase):
+    """Выгрузка в CSV: файл открывается в Excel, фильтры списка учитываются."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.category = make_category()
+        self.product = make_product(self.category, stock=3)
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.order = Order.objects.create(
+            customer_name='Іван Петренко', phone='+380501112233',
+            email='ivan@example.com', city='Харків',
+            address='вул. Тестова, 1; кв. 2', total_amount=Decimal('1998.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=2, price=Decimal('999.00'),
+        )
+        self.client.force_login(self.superuser)
+
+    def run_action(self, url, action='export_csv', objects=None, query=''):
+        objects = objects or [self.product.pk]
+        return self.client.post(
+            url + query,
+            {'action': action, 'index': '0', '_selected_action': [str(pk) for pk in objects]},
+        )
+
+    def read_csv(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
+        self.assertTrue(response['Content-Disposition'].startswith('attachment;'))
+        self.assertTrue(response.content.startswith('\ufeff'.encode('utf-8')))
+        text = response.content.decode('utf-8-sig')
+        return list(csv.reader(text.splitlines(), delimiter=';'))
+
+    def test_products_export(self):
+        response = self.run_action('/admin/shop/product/')
+        self.assertIn('products-', response['Content-Disposition'])
+        self.assertIn('.csv', response['Content-Disposition'])
+        rows = self.read_csv(response)
+        self.assertEqual(rows[0][0], 'Товар')
+        self.assertIn('Остаток, шт.', rows[0])
+        self.assertEqual(rows[1][0], 'Test Mouse')
+        self.assertEqual(rows[1][2], '999.00')
+        self.assertEqual(rows[1][3], '3')
+        self.assertEqual(rows[1][4], 'да')
+        self.assertEqual(len(rows), 2)
+
+    def test_export_respects_changelist_filter(self):
+        second = make_product(
+            self.category, name='Test Keyboard', slug='test-keyboard', stock=50,
+        )
+        response = self.run_action(
+            '/admin/shop/product/', objects=[self.product.pk, second.pk],
+            query='?stock_status=low',
+        )
+        rows = self.read_csv(response)
+        names = [row[0] for row in rows[1:]]
+        self.assertEqual(names, ['Test Mouse'])
+
+    def test_export_uses_semicolon_and_escapes_quotes(self):
+        rows = self.read_csv(self.run_action('/admin/shop/order/'))
+        self.assertEqual(rows[0][6], 'Город')
+        self.assertIn('вул. Тестова, 1; кв. 2', rows[1])
+
+    def test_orders_export_contains_items(self):
+        rows = self.read_csv(self.run_action('/admin/shop/order/'))
+        headers = rows[0]
+        self.assertIn('Номер заказа', headers)
+        self.assertIn('IP-адрес', headers)
+        row = dict(zip(headers, rows[1]))
+        self.assertEqual(row['Покупатель'], 'Іван Петренко')
+        self.assertEqual(row['Статус'], 'Новый')
+        self.assertEqual(row['Сумма, ₴'], '1998.00')
+        self.assertEqual(row['Состав заказа'], 'Test Mouse × 2')
+
+    def test_order_items_export(self):
+        rows = self.read_csv(
+            self.run_action('/admin/shop/order/', action='export_items_csv')
+        )
+        self.assertEqual(rows[0][0], 'Номер заказа')
+        self.assertIn('Количество', rows[0])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][7], 'Test Mouse')
+        self.assertEqual(rows[1][9], '2')
+        self.assertEqual(rows[1][11], '1998.00')
+
+    def test_reviews_export(self):
+        Review.objects.create(
+            product=self.product, user=self.superuser, rating=4, text='Зручно',
+        )
+        rows = self.read_csv(self.run_action('/admin/shop/review/', objects=[1]))
+        self.assertEqual(rows[0][0], 'Товар')
+        self.assertEqual(rows[1][0], 'Test Mouse')
+        self.assertEqual(rows[1][4], '4')
+        self.assertEqual(rows[1][5], 'Зручно')
+
+    def test_activity_log_export(self):
+        VisitLog.objects.create(
+            ip_address='93.184.216.34', path='/catalog/', method='GET',
+            status_code=200, browser='Chrome', os='Windows',
+        )
+        rows = self.read_csv(self.run_action('/admin/activity/visitlog/', objects=[1]))
+        self.assertEqual(rows[0][1], 'IP-адрес')
+        self.assertEqual(rows[1][1], '93.184.216.34')
+        self.assertEqual(rows[1][3], '/catalog/')
+
+    def test_view_only_staff_can_export(self):
+        staff = self.User.objects.create_user(
+            username='viewer', password='strong-pass-2026', is_staff=True,
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(codename='view_product', content_type__app_label='shop'),
+        )
+        self.client.force_login(staff)
+        rows = self.read_csv(self.run_action('/admin/shop/product/'))
+        self.assertEqual(rows[1][0], 'Test Mouse')
+
+    def test_export_is_closed_for_regular_users(self):
+        buyer = self.User.objects.create_user(
+            username='buyer', password='strong-pass-2026',
+        )
+        self.client.force_login(buyer)
+        response = self.run_action('/admin/shop/product/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/admin/login/', response.url)
+
+    def test_csv_filename_is_ascii(self):
+        response = self.run_action('/admin/shop/product/')
+        filename = response['Content-Disposition'].split('filename="')[1].rstrip('"')
+        self.assertTrue(filename.isascii(), filename)
+
+    def test_empty_selection_is_reported(self):
+        response = self.client.post('/admin/shop/product/', {
+            'action': 'export_csv', 'index': '0', '_selected_action': [],
+        })
+        self.assertEqual(response.status_code, 302)
+
+
+class LowStockAdminTests(TestCase):
+    """Метка низкого остатка: видна в списке товаров и фильтруется."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.superuser = self.User.objects.create_superuser(
+            username='admin', email='admin@example.com', password='strong-pass-2026',
+        )
+        self.category = make_category()
+        self.low = make_product(self.category, stock=LOW_STOCK_THRESHOLD)
+        self.enough = make_product(
+            self.category, name='Test Keyboard', slug='test-keyboard', stock=50,
+        )
+        self.empty = make_product(
+            self.category, name='Test Headset', slug='test-headset', stock=0,
+        )
+        self.off = make_product(
+            self.category, name='Test Pad', slug='test-pad', stock=7, is_available=False,
+        )
+        self.client.force_login(self.superuser)
+
+    def test_threshold_is_shared_with_dashboard(self):
+        self.assertEqual(LOW_STOCK_THRESHOLD, DASHBOARD_LOW_STOCK_THRESHOLD)
+        self.assertTrue(self.low.is_low_stock)
+        self.assertFalse(self.enough.is_low_stock)
+        self.assertFalse(self.empty.is_low_stock)
+
+    def test_changelist_marks_low_stock(self):
+        response = self.client.get('/admin/shop/product/')
+        self.assertContains(response, 'gzh-stock--low')
+        self.assertContains(response, 'Заканчивается')
+        self.assertContains(response, 'gzh-stock--ok')
+        self.assertContains(response, 'gzh-stock--out')
+        self.assertContains(response, 'gzh-stock--off')
+
+    def test_filter_low_stock(self):
+        response = self.client.get('/admin/shop/product/', {'stock_status': 'low'})
+        names = [obj.name for obj in response.context['cl'].result_list]
+        self.assertEqual(names, ['Test Mouse'])
+
+    def test_filter_out_of_stock(self):
+        response = self.client.get('/admin/shop/product/', {'stock_status': 'out'})
+        names = [obj.name for obj in response.context['cl'].result_list]
+        self.assertEqual(names, ['Test Headset'])
+
+    def test_filter_disabled_products(self):
+        response = self.client.get('/admin/shop/product/', {'stock_status': 'off'})
+        names = [obj.name for obj in response.context['cl'].result_list]
+        self.assertEqual(names, ['Test Pad'])
+
+    def test_filter_enough_stock(self):
+        response = self.client.get('/admin/shop/product/', {'stock_status': 'ok'})
+        names = [obj.name for obj in response.context['cl'].result_list]
+        self.assertEqual(names, ['Test Keyboard'])
+
+    def test_product_form_warns_about_low_stock(self):
+        response = self.client.get(f'/admin/shop/product/{self.low.pk}/change/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'товар заканчивается')
+
+    def test_product_form_without_warning_for_enough_stock(self):
+        response = self.client.get(f'/admin/shop/product/{self.enough.pk}/change/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'товар заканчивается')
+        self.assertContains(response, f'при остатке {LOW_STOCK_THRESHOLD} шт.')

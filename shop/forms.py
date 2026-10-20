@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.forms import PasswordChangeForm as DjangoPasswordChangeForm
 
-from .models import ContactMessage, Order, Profile
+from .models import REVIEW_TEXT_LIMIT, ContactMessage, Order, Profile, Review
 
 User = get_user_model()
 
@@ -235,3 +235,57 @@ class PasswordChangeForm(DjangoPasswordChangeForm):
             'autocomplete': 'new-password',
         }),
     )
+
+
+RATING_FORM_CHOICES = (
+    ('', 'Выберите оценку'),
+    ('5', '5 — отлично'),
+    ('4', '4 — хорошо'),
+    ('3', '3 — нормально'),
+    ('2', '2 — плохо'),
+    ('1', '1 — очень плохо'),
+)
+
+
+class ReviewForm(forms.ModelForm):
+    """Отзыв покупателя: оценка от 1 до 5 и необязательный текст."""
+
+    rating = forms.ChoiceField(
+        label='Оценка',
+        choices=RATING_FORM_CHOICES,
+        widget=forms.Select(attrs={'class': 'review-rating'}),
+    )
+
+    def clean_rating(self):
+        """Оценка обязательна и лежит в диапазоне от 1 до 5."""
+        value = self.cleaned_data.get('rating')
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            raise forms.ValidationError('Выберите оценку от 1 до 5.')
+        if not 1 <= number <= 5:
+            raise forms.ValidationError('Оценка должна быть от 1 до 5.')
+        return number
+
+    class Meta:
+        model = Review
+        fields = ['rating', 'text']
+        labels = {
+            'rating': 'Оценка',
+            'text': 'Впечатления',
+        }
+        widgets = {
+            'text': forms.Textarea(attrs={
+                'placeholder': 'Что понравилось, что нет — только по делу',
+                'rows': 4,
+                'maxlength': REVIEW_TEXT_LIMIT,
+            }),
+        }
+        help_texts = {
+            'rating': '1 — очень плохо, 5 — отлично.',
+            'text': f'Текст необязателен, но он помогает другим покупателям (до {REVIEW_TEXT_LIMIT} символов).',
+        }
+
+    def clean_text(self):
+        """Отзыв без текста допустим, но пробелы и переносы не считаются содержимым."""
+        return self.cleaned_data['text'].strip()

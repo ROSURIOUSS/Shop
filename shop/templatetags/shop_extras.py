@@ -41,3 +41,26 @@ def multiply(value, arg):
         return Decimal(value) * Decimal(arg)
     except Exception:
         return 0
+
+
+@register.filter
+def plural_ru(value, forms):
+    """Склонение существительного по-русски: 1 отзыв, 2 отзыва, 5 отзывов.
+
+    Формы передаются строкой через запятую: 'отзыв,отзыва,отзывов'.
+    """
+    try:
+        number = abs(int(value))
+    except (TypeError, ValueError):
+        return forms
+    parts = [part.strip() for part in forms.split(',')]
+    if len(parts) != 3:
+        return forms
+    one, few, many = parts
+    last_digit = number % 10
+    last_two = number % 100
+    if last_digit == 1 and last_two != 11:
+        return one
+    if 2 <= last_digit <= 4 and not 12 <= last_two <= 14:
+        return few
+    return many

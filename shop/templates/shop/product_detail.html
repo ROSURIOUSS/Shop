@@ -39,6 +39,19 @@
         <div class="product-info">
           <span class="product-info__category">{{ product.category.name }}</span>
           <h1 class="product-info__title">{{ product.name }}</h1>
+          {% if rating_count %}
+            <a class="product-info__rating" href="#reviews">
+              {% include 'shop/includes/rating_stars.html' with value=rating_avg star_size=16 %}
+              <span class="product-info__rating-note">
+                {{ rating_avg|floatformat:1 }} ·
+                {{ rating_count }} {{ rating_count|plural_ru:'отзыв,отзыва,отзывов' }}
+              </span>
+            </a>
+          {% else %}
+            <p class="product-info__rating product-info__rating--empty">
+              {% icon 'star' 16 %} Отзывов пока нет
+            </p>
+          {% endif %}
           <p class="product-info__price">{{ product.price|money }}</p>
 
           {% if product.in_stock %}
@@ -124,6 +137,117 @@
           </ul>
         </aside>
       </div>
+
+      <section class="reviews" id="reviews">
+        <div class="section-head section-head--row">
+          <h2 class="section-title">Отзывы покупателей</h2>
+          {% if rating_count %}
+            <span class="reviews__count">
+              {{ rating_count }} {{ rating_count|plural_ru:'отзыв,отзыва,отзывов' }}
+            </span>
+          {% endif %}
+        </div>
+
+        {% if rating_count %}
+          <div class="rating-summary">
+            <strong class="rating-summary__value">{{ rating_avg|floatformat:1 }}</strong>
+            <div class="rating-summary__body">
+              {% include 'shop/includes/rating_stars.html' with value=rating_avg star_size=18 %}
+              <p class="rating-summary__note">
+                Средняя оценка на основе {{ rating_count }}
+                {{ rating_count|plural_ru:'реального отзыва,реальных отзывов,реальных отзывов' }}
+                покупателей, заказавших товар.
+              </p>
+            </div>
+          </div>
+        {% endif %}
+
+        {% for review in reviews %}
+          <article class="review">
+            <header class="review__head">
+              <span class="review__avatar" aria-hidden="true">{% icon 'user' 18 %}</span>
+              <div class="review__who">
+                <strong class="review__author">{{ review.author_name }}</strong>
+                <span class="review__meta">
+                  {% include 'shop/includes/rating_stars.html' with value=review.rating star_size=13 %}
+                  <time datetime="{{ review.created_at|date:'c' }}">{{ review.created_at|date:'d.m.Y' }}</time>
+                </span>
+              </div>
+              {% if review.pk == own_review.pk %}
+                <span class="badge badge--own">Ваш отзыв</span>
+              {% endif %}
+            </header>
+            {% if review.text %}
+              <p class="review__text">{{ review.text|linebreaksbr }}</p>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="empty-state">
+            <span class="empty-state__icon">{% icon 'star' 26 %}</span>
+            <h3 class="empty-state__title">Отзывов пока нет</h3>
+            <p class="empty-state__text">
+              Первый отзыв сможет оставить покупатель, который заказал этот товар.
+            </p>
+          </div>
+        {% endfor %}
+
+        <div class="review-form-card">
+          {% if can_review %}
+            <h3 class="details-title">
+              {% if own_review %}Изменить свой отзыв{% else %}Оставить отзыв{% endif %}
+            </h3>
+            <form class="review-form" action="{% url 'shop:review_add' product.pk %}" method="post" novalidate>
+              {% csrf_token %}
+              {% if review_form.non_field_errors %}
+                <div class="alert alert--error">
+                  <span class="alert-icon">{% icon 'alert' %}</span>
+                  <span>{{ review_form.non_field_errors|first }}</span>
+                </div>
+              {% endif %}
+              <div class="form-field{% if review_form.rating.errors %} form-field--error{% endif %}">
+                <label class="form-label" for="{{ review_form.rating.id_for_label }}">
+                  Оценка <span class="req">*</span>
+                </label>
+                {{ review_form.rating }}
+                {% if review_form.rating.errors %}
+                  <p class="form-error">{{ review_form.rating.errors|first }}</p>
+                {% else %}
+                  <p class="form-help">{{ review_form.rating.help_text }}</p>
+                {% endif %}
+              </div>
+              <div class="form-field{% if review_form.text.errors %} form-field--error{% endif %}">
+                <label class="form-label" for="{{ review_form.text.id_for_label }}">Впечатления</label>
+                {{ review_form.text }}
+                {% if review_form.text.errors %}
+                  <p class="form-error">{{ review_form.text.errors|first }}</p>
+                {% else %}
+                  <p class="form-help">{{ review_form.text.help_text }}</p>
+                {% endif %}
+              </div>
+              <button class="btn btn-primary" type="submit">
+                {% icon 'check' 16 %}
+                {% if own_review %}Сохранить изменения{% else %}Опубликовать отзыв{% endif %}
+              </button>
+            </form>
+          {% elif user.is_authenticated %}
+            <p class="review-note">
+              {% icon 'info' 18 %}
+              <span>
+                Отзывы могут оставлять покупатели, которые заказывали этот товар.
+                Оформите заказ — и поделитесь впечатлениями после покупки.
+              </span>
+            </p>
+          {% else %}
+            <p class="review-note">
+              {% icon 'info' 18 %}
+              <span>
+                <a href="{% url 'shop:login' %}?next={{ request.path|urlencode }}">Войдите</a>,
+                чтобы оставить отзыв: это доступно покупателям, которые заказывали товар.
+              </span>
+            </p>
+          {% endif %}
+        </div>
+      </section>
 
       {% if related_products %}
         <div class="related">
